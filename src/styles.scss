@@ -1,1 +1,267 @@
-/* You can add global styles to this file, and also import other style files */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&family=Satisfy&display=swap');
+
+/* ===== Theme CSS Custom Properties ===== */
+:root {
+    /* Layout */
+    --bg: #f3f5f8;
+    --card: #ffffff;
+    --ink: #1e2430;
+    --muted: #6b7280;
+    --line: #e2e6ed;
+    --ink-rgb: 30, 36, 48;
+
+    /* Accent */
+    --accent: #4c5fd5;
+    --accent-hover: #3d4fc0;
+    --accent-rgb: 76, 95, 213;
+
+    /* Status */
+    --ok: #3fa37a;
+    --ok-rgb: 63, 163, 122;
+    --warn: #c98a3a;
+    --warn-rgb: 201, 138, 58;
+    --danger: #d64545;
+    --danger-rgb: 214, 69, 69;
+    --danger-hover: #c03030;
+    --review: #9b7be8;
+    --review-rgb: 155, 123, 232;
+
+    /* Header */
+    --header-bg: #1e2430;
+    --header-text: #e7e9f0;
+
+    /* Derived */
+    --line-hover: #d4d9e2;
+    --bg-hover: #ebeef2;
+}
+
+/* ① Ocean Breeze */
+[data-theme="ocean"] {
+    --accent: #0ea5e9;
+    --accent-hover: #0284c7;
+    --accent-rgb: 14, 165, 233;
+    --header-bg: #0f172a;
+}
+
+/* ② Sunset Warm */
+[data-theme="sunset"] {
+    --accent: #f97316;
+    --accent-hover: #ea580c;
+    --accent-rgb: 249, 115, 22;
+    --header-bg: #292524;
+}
+
+/* ③ Lavender Night */
+[data-theme="lavender"] {
+    --accent: #8b5cf6;
+    --accent-hover: #7c3aed;
+    --accent-rgb: 139, 92, 246;
+    --header-bg: linear-gradient(135deg, #312e81, #4c1d95);
+}
+
+/* ④ Midnight Blue */
+[data-theme="midnight"] {
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --accent-rgb: 59, 130, 246;
+    --header-bg: linear-gradient(135deg, #1e3a5f, #0f2942);
+}
+
+/* ⑤ Forest */
+[data-theme="forest"] {
+    --accent: #16a34a;
+    --accent-hover: #15803d;
+    --accent-rgb: 22, 163, 74;
+    --header-bg: #14532d;
+}
+
+/* ⑥ Rose */
+[data-theme="rose"] {
+    --accent: #e11d48;
+    --accent-hover: #be123c;
+    --accent-rgb: 225, 29, 72;
+    --header-bg: #881337;
+}
+
+/* ⑦ Noir (ダークモード) */
+[data-theme="noir"] {
+    --bg: #0a0a0b;
+    --card: #18181b;
+    --ink: #fafafa;
+    --muted: #a1a1aa;
+    --line: #27272a;
+    --ink-rgb: 250, 250, 250;
+    --accent: #a78bfa;
+    --accent-hover: #8b5cf6;
+    --accent-rgb: 167, 139, 250;
+    --ok: #4ade80;
+    --ok-rgb: 74, 222, 128;
+    --warn: #fbbf24;
+    --warn-rgb: 251, 191, 36;
+    --danger: #f87171;
+    --danger-rgb: 248, 113, 113;
+    --danger-hover: #ef4444;
+    --review: #c4b5fd;
+    --review-rgb: 196, 181, 253;
+    --header-bg: #0a0a0b;
+    --header-text: #fafafa;
+    --line-hover: #3f3f46;
+    --bg-hover: #18181b;
+}
+
+/* ⑧ Candy Pop */
+[data-theme="candy"] {
+    --accent: #ec4899;
+    --accent-hover: #db2777;
+    --accent-rgb: 236, 72, 153;
+    --header-bg: linear-gradient(135deg, #7c3aed, #db2777);
+}
+
+/* ===== Global Reset ===== */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+/* ===== SVGアイコン共通サイズ ===== */
+.chip-icon {
+    width: 11px !important;
+    height: 11px !important;
+    flex-shrink: 0;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.btn-icon {
+    width: 13px !important;
+    height: 13px !important;
+    flex-shrink: 0;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+/* ===== 依存タスク チェックリスト ===== */
+.blocked-by-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 180px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+    border: 1px solid #e2e6ed;
+    border-radius: 8px;
+    padding: 6px 8px;
+}
+
+.blocked-by-option {
+    display: flex !important;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12.5px;
+
+    &:hover {
+        background: rgba(76, 95, 213, 0.06);
+    }
+
+    &.selected {
+        background: rgba(76, 95, 213, 0.1);
+    }
+
+    input[type="checkbox"] {
+        flex-shrink: 0;
+        width: 14px;
+        height: 14px;
+        accent-color: #4c5fd5;
+        cursor: pointer;
+        margin: 0;
+    }
+
+    .blocked-by-title {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .blocked-by-assignee {
+        font-size: 11px;
+        color: #6b7280;
+        flex-shrink: 0;
+    }
+}
+
+.blocked-by-empty {
+    font-size: 12px;
+    color: #6b7280;
+    text-align: center;
+    padding: 8px;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: "Inter", "Noto Sans JP", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    background: var(--bg);
+    color: var(--ink);
+}
+
+app-root {
+    display: block;
+    height: 100%;
+}
+
+router-outlet {
+    display: none;
+}
+
+.cdk-drag-preview,
+.cdk-drag-placeholder {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.compact-task-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 180px;
+    padding: 9px 11px;
+    border: 1px solid var(--accent);
+    border-radius: 9px;
+    background: var(--card);
+    color: var(--ink);
+    box-shadow: 0 8px 24px rgba(var(--ink-rgb), 0.18);
+    font-family: inherit;
+    pointer-events: none;
+}
+
+.compact-task-preview-title {
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.compact-task-preview-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    color: var(--muted);
+    font-size: 10px;
+}
+
+.compact-task-preview-meta span {
+    padding: 2px 6px;
+    border-radius: 10px;
+    background: var(--bg);
+}

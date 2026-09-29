@@ -1,0 +1,1849 @@
+<div
+  class="app"
+  [style.grid-template-columns]="
+    isMobile() ? '1fr' : sidebarCollapsed() ? '48px 1fr' : sidebarWidth() + 'px 1fr'
+  "
+>
+  <aside class="sidebar" [class.collapsed]="sidebarCollapsed()">
+    <!-- 折りたたみトグルボタン -->
+    <button
+      class="sidebar-toggle"
+      (click)="toggleSidebarCollapsed()"
+      [title]="sidebarCollapsed() ? '負荷パネルを開く' : '負荷パネルを閉じる'"
+    >
+      {{ sidebarCollapsed() ? '›' : '‹' }}
+    </button>
+
+    <!-- 折りたたみ時: アバターだけ表示 -->
+    @if (sidebarCollapsed()) {
+      <div class="sidebar-avatars">
+        @if (sortedMembers()[0]; as member) {
+          @let pct = tasksService.getLoadPercent(member.uid);
+          @let level = loadLevel(pct);
+          <div
+            class="avatar-mini-wrap"
+            [title]="
+              member.name +
+              ' (' +
+              (member.role === 'manager' ? 'Manager' : 'Member') +
+              ') ' +
+              pct +
+              '%'
+            "
+            [class.selected]="filterAssignee() === member.uid"
+            (click)="filterByMember(member.uid)"
+          >
+            <span class="avatar" [style.background]="member.avatarColor">{{
+              member.name.charAt(0)
+            }}</span>
+            <span class="avatar-dot" [class]="level"></span>
+          </div>
+        }
+        <div
+          style="display: flex; flex-direction: column; gap: 10px"
+          cdkDropList
+          [cdkDropListData]="draggableSidebarMembers()"
+          (cdkDropListDropped)="reorderSidebar($event)"
+        >
+          @for (member of draggableSidebarMembers(); track member.uid) {
+            @let pct = tasksService.getLoadPercent(member.uid);
+            @let level = loadLevel(pct);
+            <div
+              class="avatar-mini-wrap"
+              cdkDrag
+              [cdkDragData]="member"
+              [title]="
+                member.name +
+                ' (' +
+                (member.role === 'manager' ? 'Manager' : 'Member') +
+                ') ' +
+                pct +
+                '%'
+              "
+              [class.selected]="filterAssignee() === member.uid"
+              (click)="filterByMember(member.uid)"
+            >
+              <span class="avatar" [style.background]="member.avatarColor">{{
+                member.name.charAt(0)
+              }}</span>
+              <span class="avatar-dot" [class]="level"></span>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- 展開時: 通常表示 -->
+    @if (!sidebarCollapsed()) {
+      <h2>チームの負荷</h2>
+      <div class="sub">未完了タスクの見積もり合計/週稼働時間</div>
+
+      @if (sortedMembers()[0]; as member) {
+        @let pct = tasksService.getLoadPercent(member.uid);
+        @let level = loadLevel(pct);
+        <div
+          class="member is-me"
+          [class.selected]="filterAssignee() === member.uid"
+          (click)="filterByMember(member.uid)"
+        >
+          <div class="member-top">
+            <div
+              class="member-name"
+              style="white-space: nowrap; min-width: 0; overflow: hidden; flex: 1 1 auto; gap: 5px"
+            >
+              <span class="avatar" [style.background]="member.avatarColor">{{
+                member.name.charAt(0)
+              }}</span>
+              <span
+                style="min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis"
+                >{{ member.name }}</span
+              >
+              @if (member.role === 'manager') {
+                <span
+                  style="
+                    flex-shrink: 1;
+                    min-width: 0;
+                    max-width: 52px;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                    font-size: 9px;
+                    font-weight: 500;
+                    color: var(--accent);
+                    background: rgba(var(--accent-rgb), 0.1);
+                    border: 1px solid rgba(var(--accent-rgb), 0.2);
+                    border-radius: 4px;
+                    padding: 1px 4px;
+                  "
+                  >Manager</span
+                >
+              }
+            </div>
+            <span class="member-pct" style="margin-left: 8px; flex-shrink: 0" [class]="level"
+              >{{ pct }}%</span
+            >
+          </div>
+          <div class="bar-track">
+            <div class="bar-fill" [class]="level" [style.width.%]="pct > 100 ? 100 : pct"></div>
+          </div>
+          <div class="member-detail">
+            {{ getMemberTaskCount(member.uid) }}タスク | {{ getMemberTotalHours(member.uid) }}h /
+            <button class="capacity-btn" (click)="openCapacityEdit(member)">
+              {{ member.weeklyCapacityHours }}h
+            </button>
+          </div>
+        </div>
+      }
+      <div
+        class="sidebar-members"
+        cdkDropList
+        [cdkDropListData]="draggableSidebarMembers()"
+        (cdkDropListDropped)="reorderSidebar($event)"
+      >
+        @for (member of draggableSidebarMembers(); track member.uid) {
+          @let pct = tasksService.getLoadPercent(member.uid);
+          @let level = loadLevel(pct);
+          <div
+            class="member"
+            cdkDrag
+            [cdkDragData]="member"
+            [class.selected]="filterAssignee() === member.uid"
+            (click)="filterByMember(member.uid)"
+          >
+            <div class="member-top">
+              <div
+                class="member-name"
+                style="
+                  white-space: nowrap;
+                  min-width: 0;
+                  overflow: hidden;
+                  flex: 1 1 auto;
+                  gap: 5px;
+                "
+              >
+                <span class="avatar" [style.background]="member.avatarColor">{{
+                  member.name.charAt(0)
+                }}</span>
+                <span
+                  style="min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis"
+                  >{{ member.name }}</span
+                >
+                @if (member.role === 'manager') {
+                  <span
+                    style="
+                      flex-shrink: 1;
+                      min-width: 0;
+                      max-width: 52px;
+                      overflow: hidden;
+                      text-overflow: ellipsis;
+                      white-space: nowrap;
+                      font-size: 9px;
+                      font-weight: 500;
+                      color: var(--accent);
+                      background: rgba(var(--accent-rgb), 0.1);
+                      border: 1px solid rgba(var(--accent-rgb), 0.2);
+                      border-radius: 4px;
+                      padding: 1px 4px;
+                    "
+                    >Manager</span
+                  >
+                }
+              </div>
+              <span class="member-pct" style="margin-left: 8px; flex-shrink: 0" [class]="level"
+                >{{ pct }}%</span
+              >
+            </div>
+            <div class="bar-track">
+              <div class="bar-fill" [class]="level" [style.width.%]="pct > 100 ? 100 : pct"></div>
+            </div>
+            <div class="member-detail">
+              {{ getMemberTaskCount(member.uid) }}タスク | {{ getMemberTotalHours(member.uid) }}h /
+              <button class="capacity-btn" (click)="openCapacityEdit(member)">
+                {{ member.weeklyCapacityHours }}h
+              </button>
+            </div>
+          </div>
+        }
+      </div>
+
+      <div class="sidebar-legend">
+        <div class="legend-row"><span class="legend-dot ok"></span>80%未満</div>
+        <div class="legend-row"><span class="legend-dot warn"></span>80〜100%</div>
+        <div class="legend-row"><span class="legend-dot danger"></span>100%超</div>
+      </div>
+    }
+  </aside>
+
+  @if (!isMobile() && !sidebarCollapsed()) {
+    <button
+      class="panel-resizer sidebar-resizer"
+      type="button"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="サイドバーの幅を変更"
+      [style.left.px]="sidebarWidth()"
+      [attr.aria-valuenow]="sidebarWidth()"
+      aria-valuemin="180"
+      aria-valuemax="420"
+      (pointerdown)="startPanelResize('sidebar', $event)"
+      (keydown)="adjustPanelWidth('sidebar', $event)"
+    ></button>
+  }
+
+  <div class="board-with-panel">
+    <main class="board-outer">
+      <div class="filter-bar" [class.is-expanded]="isFilterExpanded()">
+        <div class="search-wrap">
+          <svg
+            class="search-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="text"
+            [ngModel]="searchQuery()"
+            (ngModelChange)="searchQuery.set($event)"
+            placeholder="タスク名で検索..."
+            class="search-input"
+            aria-label="タスク名で検索"
+          />
+          @if (searchQuery()) {
+            <button
+              class="search-clear"
+              type="button"
+              aria-label="検索をクリア"
+              (click)="searchQuery.set('')"
+            >
+              ✕
+            </button>
+          }
+        </div>
+
+        <button
+          class="mobile-filter-toggle"
+          type="button"
+          (click)="isFilterExpanded.update((v) => !v)"
+        >
+          <svg
+            class="toggle-arrow"
+            [class.open]="isFilterExpanded()"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+
+        <div class="filter-menu">
+          <button
+            class="filter-icon-btn"
+            type="button"
+            [class.active]="showFilters"
+            [attr.aria-expanded]="showFilters"
+            aria-controls="board-filter-popover"
+            aria-label="絞り込み条件"
+            (click)="toggleFilters()"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+            </svg>
+            @if (filterAssignee() || filterPriority()) {
+              <span class="filter-dot"></span>
+            }
+          </button>
+
+          @if (showFilters) {
+            <div class="filter-popover" id="board-filter-popover">
+              <label class="filter-label" for="filter-assignee">担当者</label>
+              <select
+                id="filter-assignee"
+                [ngModel]="filterAssignee()"
+                (ngModelChange)="filterAssignee.set($event)"
+                class="filter-select"
+              >
+                <option [ngValue]="null">すべて</option>
+                @for (m of sortedMembers(); track m.uid) {
+                  <option [ngValue]="m.uid">{{ m.name }}</option>
+                }
+              </select>
+
+              <label class="filter-label" for="filter-priority">優先度</label>
+              <select
+                id="filter-priority"
+                [ngModel]="filterPriority()"
+                (ngModelChange)="filterPriority.set($event)"
+                class="filter-select"
+              >
+                <option [ngValue]="null">すべて</option>
+                <option value="high">🔴 高</option>
+                <option value="medium">🟡 中</option>
+                <option value="low">🟢 低</option>
+              </select>
+            </div>
+          }
+        </div>
+
+        <div class="active-chips">
+          @if (filterAssignee(); as assigneeId) {
+            <span class="active-chip">
+              担当: {{ getMemberName(assigneeId) }}
+              <button
+                type="button"
+                [attr.aria-label]="getMemberName(assigneeId) + 'の担当者フィルターを解除'"
+                (click)="filterAssignee.set(null)"
+              >
+                ✕
+              </button>
+            </span>
+          }
+          @if (filterPriority(); as priority) {
+            <span class="active-chip">
+              優先度: {{ getPriorityLabel(priority) }}
+              <button
+                type="button"
+                [attr.aria-label]="getPriorityLabel(priority) + 'の優先度フィルターを解除'"
+                (click)="filterPriority.set(null)"
+              >
+                ✕
+              </button>
+            </span>
+          }
+        </div>
+
+        <div class="toolbar-right">
+          <div class="sort-menu">
+            <button
+              class="sort-control"
+              type="button"
+              [attr.aria-expanded]="showSortMenu"
+              aria-haspopup="true"
+              aria-controls="board-sort-options"
+              (click)="toggleSortMenu()"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <polyline points="19 12 12 19 5 12" />
+              </svg>
+              <span>{{ getSortLabel() }}</span>
+            </button>
+            @if (showSortMenu) {
+              <div
+                class="filter-popover sort-options"
+                id="board-sort-options"
+                role="group"
+                aria-label="並び替え方法"
+              >
+                <button
+                  type="button"
+                  [class.selected]="sortBy() === 'none'"
+                  [attr.aria-pressed]="sortBy() === 'none'"
+                  (click)="setSortBy('none')"
+                >
+                  並び替えなし
+                </button>
+                <button
+                  type="button"
+                  [class.selected]="sortBy() === 'priority'"
+                  [attr.aria-pressed]="sortBy() === 'priority'"
+                  (click)="setSortBy('priority')"
+                >
+                  優先度順
+                </button>
+                <button
+                  type="button"
+                  [class.selected]="sortBy() === 'dueDate'"
+                  [attr.aria-pressed]="sortBy() === 'dueDate'"
+                  (click)="setSortBy('dueDate')"
+                >
+                  締切順
+                </button>
+              </div>
+            }
+          </div>
+
+          <!-- コンパクト/詳細 切替 -->
+          <button class="view-toggle-btn" type="button" (click)="toggleViewMode()">
+            @if (viewMode() === 'detail') {
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="8" y1="6" x2="21" y2="6" />
+                <line x1="8" y1="12" x2="21" y2="12" />
+                <line x1="8" y1="18" x2="21" y2="18" />
+                <line x1="3" y1="6" x2="3.01" y2="6" />
+                <line x1="3" y1="12" x2="3.01" y2="12" />
+                <line x1="3" y1="18" x2="3.01" y2="18" />
+              </svg>
+            } @else {
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <line x1="3" y1="9" x2="21" y2="9" />
+                <line x1="3" y1="15" x2="21" y2="15" />
+                <line x1="9" y1="3" x2="9" y2="21" />
+              </svg>
+            }
+            <span>{{ viewMode() === 'detail' ? 'コンパクト表示' : '詳細表示' }}</span>
+          </button>
+
+          <!-- グループ表示切替 -->
+          <div class="sort-menu swimlane-menu">
+            <button
+              class="sort-control"
+              type="button"
+              [attr.aria-expanded]="showSwimlaneMenu"
+              aria-haspopup="true"
+              (click)="showSwimlaneMenu = !showSwimlaneMenu"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+              {{
+                swimlaneMode() === 'none'
+                  ? 'グループ表示'
+                  : swimlaneMode() === 'assignee'
+                    ? '担当者別'
+                    : '優先度別'
+              }}
+            </button>
+            @if (showSwimlaneMenu) {
+              <div
+                class="filter-popover sort-options swimlane-options"
+                role="group"
+                aria-label="タスクのグループ表示"
+              >
+                <button
+                  type="button"
+                  [class.selected]="swimlaneMode() === 'none'"
+                  (click)="setSwimlane('none'); showSwimlaneMenu = false"
+                >
+                  すべて表示
+                </button>
+                <button
+                  type="button"
+                  [class.selected]="swimlaneMode() === 'assignee'"
+                  (click)="setSwimlane('assignee'); showSwimlaneMenu = false"
+                >
+                  担当者別
+                </button>
+                <button
+                  type="button"
+                  [class.selected]="swimlaneMode() === 'priority'"
+                  (click)="setSwimlane('priority'); showSwimlaneMenu = false"
+                >
+                  優先度別
+                </button>
+              </div>
+            }
+          </div>
+
+          @if (filterAssignee() || filterPriority() || searchQuery() || sortBy() !== 'none') {
+            <button class="filter-clear" type="button" (click)="clearFilters()">
+              すべてクリア
+            </button>
+          }
+        </div>
+      </div>
+
+      <div
+        class="board"
+        [class.compact]="viewMode() === 'compact'"
+        [class.has-swimlanes]="swimlaneMode() !== 'none'"
+      >
+        @if (swimlaneMode() !== 'none') {
+          <!-- グループ列のヘッダー -->
+          <div class="swimlane-header-row">
+            <div class="swimlane-label-spacer"></div>
+            @for (status of columns; track status) {
+              <div class="swimlane-col-head">
+                <span class="col-dot" [class]="getStatusColor(status)"></span>
+                <span class="col-title">{{ status }}</span>
+              </div>
+            }
+          </div>
+          <!-- 各グループの行 -->
+          @for (lane of swimlaneKeys(); track lane.key) {
+            <div
+              class="swimlane-row"
+              [class.lane-collapsed]="isMobile() && !expandedLanes().has(lane.key)"
+            >
+              <div
+                class="swimlane-label"
+                (click)="isMobile() ? toggleLane(lane.key) : null"
+                [class.clickable]="isMobile()"
+              >
+                @if (lane.color) {
+                  <span class="avatar small" [style.background]="lane.color">{{
+                    lane.label.charAt(0)
+                  }}</span>
+                }
+                <span>{{ lane.label }}</span>
+                @if (isMobile()) {
+                  <span class="swimlane-lane-count">{{ getLaneTaskCount(lane.key) }}件</span>
+                  <svg
+                    class="swimlane-chevron"
+                    [class.collapsed]="!expandedLanes().has(lane.key)"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                }
+              </div>
+              @for (status of columns; track status) {
+                <div
+                  class="swimlane-cell"
+                  [class.empty-lane-cell]="
+                    getSwimlaneTasks(lane.key, rootTasksByColumn()[status]).length === 0
+                  "
+                >
+                  <div class="swimlane-cell-status">
+                    <span class="col-dot" [class]="getStatusColor(status)"></span>
+                    <span>{{ status }}</span>
+                  </div>
+                  @for (
+                    task of getSwimlaneTasks(lane.key, rootTasksByColumn()[status]);
+                    track task.id
+                  ) {
+                    @let children = getChildren(task.id);
+                    @let isEpic = children.length > 0;
+                    @let blocking = tasksService.getBlockingCount(task.id);
+                    <div
+                      class="card status-{{ getStatusClass(task.status) }}"
+                      [id]="'task-' + task.id"
+                      [class.epic]="isEpic"
+                      [class.stalled]="tasksService.isStalled(task)"
+                      [class.selected]="selectedTask()?.id === task.id"
+                      [class.compact-expanded]="expandedCompactTaskId() === task.id"
+                      (click)="toggleCompactTaskDetails(task, $event)"
+                    >
+                      @if (viewMode() === 'compact') {
+                        <div class="compact-card-heading">
+                          <span class="compact-card-title">{{ task.title }}</span>
+                          <span class="compact-card-assignee">
+                            @if (task.assigneeId) {
+                              <span
+                                class="avatar small"
+                                [style.background]="getMemberColor(task.assigneeId)"
+                                >{{ getMemberName(task.assigneeId).charAt(0) }}</span
+                              >
+                            }
+                            <span class="compact-card-assignee-name">{{
+                              getMemberName(task.assigneeId)
+                            }}</span>
+                          </span>
+                        </div>
+                      } @else {
+                        <div class="card-top">
+                          <span class="card-date">
+                            {{ formatDate(task.createdAt) }}
+                            @if (task.createdBy) {
+                              (作成者: {{ getMemberName(task.createdBy) }})
+                            }
+                          </span>
+                          <div style="display: flex; gap: 4px">
+                            <button class="comment-btn" (click)="openCommentPanel(task, $event)">
+                              コメント
+                            </button>
+                            <button class="edit-btn" (click)="openEditTask(task, $event)">
+                              編集
+                            </button>
+                            @if (canMoveTask(task)) {
+                              <button class="delete-btn" (click)="deleteTask(task)" title="削除">
+                                ×
+                              </button>
+                            }
+                          </div>
+                        </div>
+                        <div class="card-title">{{ task.title }}</div>
+                        @if (task.description) {
+                          <div class="card-desc">{{ task.description }}</div>
+                        }
+                      }
+                      <div class="card-meta">
+                        @if (task.estimatedHours) {
+                          <span class="meta-chip time">{{ task.estimatedHours }}h</span>
+                        }
+                        @if (task.actualHours !== null && task.actualHours !== undefined) {
+                          <span class="meta-chip actual">実績 {{ task.actualHours }}h</span>
+                        }
+                        @if (blocking > 0) {
+                          <span class="meta-chip blocks">{{ blocking }}件ブロック中</span>
+                        }
+                        @if (getBlockedLabel(task); as label) {
+                          <span class="meta-chip blocked">{{ label }}</span>
+                        }
+                        @if (tasksService.isStalled(task)) {
+                          <span class="meta-chip stalled">停滞中</span>
+                        }
+                        @if (task.dueDate) {
+                          @let ds = dueDateStatus(task);
+                          <span
+                            class="meta-chip"
+                            [class.overdue]="ds === 'overdue'"
+                            [class.today]="ds === 'today'"
+                            [class.soon]="ds === 'soon'"
+                            >{{ formatDueDate(task.dueDate) }}</span
+                          >
+                        }
+                        @if (task.priority) {
+                          <span class="meta-chip priority-{{ task.priority }}">{{
+                            priorityLabel(task.priority)
+                          }}</span>
+                        }
+                      </div>
+                      @if (isEpic && viewMode() === 'detail') {
+                        @let progress = tasksService.getEpicProgress(task.id);
+                        <div class="epic-info">
+                          <div class="owner">
+                            @if (task.assigneeId) {
+                              <span
+                                class="avatar"
+                                [style.background]="getMemberColor(task.assigneeId)"
+                                >{{ getMemberName(task.assigneeId).charAt(0) }}</span
+                              >
+                            }
+                            <span class="owner-details"
+                              ><span class="owner-label">{{
+                                getMemberName(task.assigneeId)
+                              }}</span></span
+                            >
+                          </div>
+                          <div class="progress-row">
+                            <div class="progress-track">
+                              <div class="progress-fill" [style.width.%]="progress"></div>
+                            </div>
+                            <span class="progress-pct">{{ progress }}%</span>
+                          </div>
+                        </div>
+                        <div class="subtasks-section">
+                          <button
+                            class="subtasks-toggle"
+                            type="button"
+                            [attr.aria-expanded]="expandedSubtaskIds().has(task.id)"
+                            (click)="toggleSubtasks(task.id); $event.stopPropagation()"
+                          >
+                            <span>サブタスク {{ children.length }}件</span>
+                            <svg
+                              class="subtasks-chevron"
+                              [class.collapsed]="!expandedSubtaskIds().has(task.id)"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              aria-hidden="true"
+                            >
+                              <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                          </button>
+                          @if (expandedSubtaskIds().has(task.id)) {
+                            <div class="subtasks">
+                              @for (child of children; track child.id) {
+                                <div class="subtask-row" [id]="'task-' + child.id">
+                                  <span
+                                    class="subtask-status"
+                                    [class.done]="getStatusColor(child.status) === 'done'"
+                                    [class.active]="getStatusColor(child.status) === 'active'"
+                                    (click)="toggleSubtaskStatus(child); $event.stopPropagation()"
+                                    title="クリックで切り替え"
+                                  >
+                                    @if (getStatusColor(child.status) === 'done') {
+                                      <svg
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="#fff"
+                                        stroke-width="3"
+                                        width="10"
+                                        height="10"
+                                      >
+                                        <polyline points="20 6 9 17 4 12" />
+                                      </svg>
+                                    }
+                                  </span>
+                                  <span
+                                    class="subtask-title"
+                                    [class.strike]="getStatusColor(child.status) === 'done'"
+                                    >{{ child.title }}</span
+                                  >
+                                  @if (child.estimatedHours) {
+                                    <span class="subtask-hours">{{ child.estimatedHours }}h</span>
+                                  }
+                                  <button
+                                    class="edit-btn small"
+                                    (click)="openEditTask(child, $event)"
+                                  >
+                                    編集
+                                  </button>
+                                </div>
+                              }
+                            </div>
+                          }
+                        </div>
+                      }
+                      @if (viewMode() === 'compact' && canMoveTask(task)) {
+                        <div class="move-buttons compact-swimlane-actions">
+                          @if (task.status === '進行中' || task.status === '差し戻し中') {
+                            <button
+                              [disabled]="!canMoveTask(task)"
+                              (click)="moveTask(task, '未着手'); $event.stopPropagation()"
+                            >
+                              ← 戻す
+                            </button>
+                          }
+                          @if (task.status === '完了') {
+                            <button
+                              [disabled]="!canMoveTask(task)"
+                              (click)="moveTask(task, '進行中'); $event.stopPropagation()"
+                            >
+                              ← 戻す
+                            </button>
+                          } @else {
+                            @let nextStatus = task.status === '未着手' ? '進行中' : '完了';
+                            @let blockedForComplete =
+                              nextStatus === '完了' && tasksService.isBlocked(task);
+                            <button
+                              [disabled]="!canMoveTask(task) || blockedForComplete"
+                              [class.blocked-btn]="blockedForComplete"
+                              (click)="moveTask(task, nextStatus); $event.stopPropagation()"
+                            >
+                              @if (blockedForComplete) {
+                                <svg
+                                  class="btn-icon blocked-icon"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  stroke-width="2"
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                >
+                                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                </svg>
+                              }
+                              進める →
+                            </button>
+                          }
+                        </div>
+                      } @else if (canMoveTask(task)) {
+                        <div class="move-buttons">
+                          @if (task.status === '進行中' || task.status === '差し戻し中') {
+                            <button (click)="moveTask(task, '未着手'); $event.stopPropagation()">
+                              ← 戻す
+                            </button>
+                          }
+                          @if (task.status === '完了') {
+                            <button (click)="moveTask(task, '進行中'); $event.stopPropagation()">
+                              ← 進行中に戻す
+                            </button>
+                          } @else {
+                            @let nextStatus = task.status === '未着手' ? '進行中' : '完了';
+                            @let blockedForComplete =
+                              nextStatus === '完了' && tasksService.isBlocked(task);
+                            <button
+                              [class.blocked-btn]="blockedForComplete"
+                              [disabled]="blockedForComplete"
+                              (click)="moveTask(task, nextStatus); $event.stopPropagation()"
+                            >
+                              @if (blockedForComplete) {
+                                <svg
+                                  class="btn-icon blocked-icon"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  stroke-width="2"
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                >
+                                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                </svg>
+                              }
+                              {{ nextStatus === '完了' ? '完了 →' : '進める →' }}
+                            </button>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          }
+        } @else {
+          @for (status of columns; track status) {
+            <div
+              class="column"
+              [hidden]="status === '差し戻し中' && rootTasksByColumn()[status].length === 0"
+            >
+              <div class="col-head">
+                <div class="col-title-wrap">
+                  <span class="col-dot" [class]="getStatusColor(status)"></span>
+                  <span class="col-title">{{ status }}</span>
+                </div>
+                <span class="col-count">{{ rootTasksByColumn()[status].length }}</span>
+              </div>
+
+              <button class="add-trigger" (click)="toggleAddRoot(status)">+ タスクを追加</button>
+
+              @if (newRootColumn === status) {
+                <div
+                  class="add-form"
+                  style="margin-bottom: 14px"
+                  (mousedown)="$event.stopPropagation()"
+                  (touchstart)="$event.stopPropagation()"
+                  (click)="$event.stopPropagation()"
+                >
+                  <input
+                    type="text"
+                    [(ngModel)]="newRootTitle"
+                    placeholder="タスク名"
+                    (input)="addRootError = ''"
+                    (keydown.enter)="confirmAddRoot(status)"
+                  />
+                  @if (addRootError) {
+                    <div class="error-text">{{ addRootError }}</div>
+                  }
+                  <textarea
+                    [(ngModel)]="newRootDescription"
+                    placeholder="説明（任意）"
+                    class="desc-input"
+                    rows="2"
+                  ></textarea>
+                  <select [(ngModel)]="newRootAssignee">
+                    <option [ngValue]="null">担当者を選ぶ(任意)</option>
+                    @for (m of sortedMembers(); track m.uid) {
+                      <option [ngValue]="m.uid">
+                        {{ m.name }}({{ tasksService.getLoadPercent(m.uid) }}%)
+                      </option>
+                    }
+                  </select>
+                  <div class="input-with-unit">
+                    <input
+                      type="number"
+                      [(ngModel)]="newRootHours"
+                      min="0.5"
+                      step="0.5"
+                      placeholder="見積もり時間"
+                    />
+                    <span class="unit">h</span>
+                  </div>
+                  <input type="date" [(ngModel)]="newRootDueDate" />
+                  <select [(ngModel)]="newRootPriority">
+                    <option [ngValue]="null">優先度を選ぶ(任意)</option>
+                    <option value="high">🔴 高</option>
+                    <option value="medium">🟡 中</option>
+                    <option value="low">🟢 低</option>
+                  </select>
+
+                  @if (newRootAssignee) {
+                    @let pct = getLoadPct(newRootAssignee);
+                    @let level = loadLevel(pct);
+                    <div class="load-preview">
+                      <span>{{ getMemberName(newRootAssignee) }}の負荷</span>
+                      <div class="lp-bar">
+                        <div
+                          class="lp-fill"
+                          [class]="level"
+                          [style.width.%]="pct > 100 ? 100 : pct"
+                        ></div>
+                      </div>
+                      <span>{{ pct }}%</span>
+                    </div>
+                    @if (level === 'danger') {
+                      <div class="warning-box">
+                        <svg
+                          class="chip-icon"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <path
+                            d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                          />
+                          <line x1="12" y1="9" x2="12" y2="13" />
+                          <line x1="12" y1="17" x2="12.01" y2="17" />
+                        </svg>
+                        {{ getMemberName(newRootAssignee) }}さんはすでに{{ pct }}%の負荷です
+                        @if (suggestAlternative(newRootAssignee); as alt) {
+                          <br /><button class="suggest" (click)="newRootAssignee = alt.uid">
+                            代わりに{{ alt.name }}さん({{ alt.pct }}%)に振る
+                          </button>
+                        }
+                      </div>
+                    }
+                  }
+
+                  <div class="add-form-actions">
+                    <button (click)="toggleAddRoot(status)">キャンセル</button>
+                    <button class="confirm" (click)="confirmAddRoot(status)">追加</button>
+                  </div>
+                </div>
+              }
+
+              <div
+                class="drop-zone"
+                cdkDropList
+                [id]="'col-' + status"
+                [cdkDropListData]="rootTasksByColumn()[status]"
+                [cdkDropListConnectedTo]="connectedLists"
+                (cdkDropListDropped)="onDrop($event, status)"
+              >
+                @for (task of rootTasksByColumn()[status]; track task.id) {
+                  @let children = getChildren(task.id);
+                  @let isEpic = children.length > 0;
+                  @let blocking = tasksService.getBlockingCount(task.id);
+
+                  <div
+                    class="card status-{{ getStatusClass(task.status) }}"
+                    [id]="'task-' + task.id"
+                    [class.epic]="isEpic"
+                    [class.stalled]="tasksService.isStalled(task)"
+                    [class.selected]="selectedTask()?.id === task.id"
+                    [class.compact-expanded]="expandedCompactTaskId() === task.id"
+                    cdkDrag
+                    [cdkDragData]="task"
+                    [cdkDragDisabled]="!canMoveTask(task)"
+                    (click)="toggleCompactTaskDetails(task, $event)"
+                  >
+                    <div class="card-top">
+                      <span class="card-date">
+                        {{ formatDate(task.createdAt) }}
+                        @if (task.createdBy) {
+                          <span class="card-creator"
+                            >(作成者: {{ getMemberName(task.createdBy) }})</span
+                          >
+                        }
+                      </span>
+                      <div class="card-actions" style="display: flex; gap: 4px">
+                        <button
+                          class="comment-btn"
+                          (click)="openCommentPanel(task, $event)"
+                          title="コメント"
+                        >
+                          <svg
+                            class="btn-icon"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path
+                              d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+                            />
+                            <line x1="8" y1="9" x2="16" y2="9" />
+                            <line x1="8" y1="13" x2="13" y2="13" />
+                          </svg>
+                          <span>コメント</span>
+                        </button>
+                        <button class="edit-btn" (click)="openEditTask(task, $event)">編集</button>
+                        @if (canMoveTask(task)) {
+                          <button class="delete-btn" (click)="deleteTask(task)" title="削除">
+                            ×
+                          </button>
+                        }
+                      </div>
+                    </div>
+
+                    @if (viewMode() === 'compact') {
+                      <div class="compact-card-heading">
+                        <span class="compact-card-title">{{ task.title }}</span>
+                        <span class="compact-card-assignee">
+                          @if (task.assigneeId) {
+                            <span
+                              class="avatar small"
+                              [style.background]="getMemberColor(task.assigneeId)"
+                              >{{ getMemberName(task.assigneeId).charAt(0) }}</span
+                            >
+                          }
+                          <span class="compact-card-assignee-name">{{
+                            getMemberName(task.assigneeId)
+                          }}</span>
+                        </span>
+                      </div>
+                    }
+
+                    <div
+                      class="card-title"
+                      (click)="
+                        viewMode() === 'compact'
+                          ? toggleCompactTaskDetails(task, $event)
+                          : openCommentPanel(task, $event)
+                      "
+                      style="cursor: pointer"
+                    >
+                      {{ task.title }}
+                    </div>
+
+                    @if (task.description) {
+                      <div class="card-desc">{{ task.description }}</div>
+                    }
+
+                    <div class="card-meta">
+                      @if (task.estimatedHours) {
+                        <span class="meta-chip time">{{ task.estimatedHours }}h</span>
+                      }
+                      @if (task.actualHours !== null && task.actualHours !== undefined) {
+                        <span class="meta-chip actual">実績 {{ task.actualHours }}h</span>
+                      }
+                      @if (blocking > 0) {
+                        <span class="meta-chip blocks"
+                          ><svg
+                            class="chip-icon"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                          </svg>
+                          {{ blocking }}件ブロック中</span
+                        >
+                      }
+                      @if (getBlockedLabel(task); as label) {
+                        <span class="meta-chip blocked"
+                          ><svg
+                            class="chip-icon"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                            <path
+                              d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
+                            />
+                          </svg>
+                          {{ label }}</span
+                        >
+                      }
+                      @if (tasksService.isStalled(task)) {
+                        <span class="meta-chip stalled"
+                          ><svg
+                            class="chip-icon"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path
+                              d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                            />
+                            <line x1="12" y1="9" x2="12" y2="13" />
+                            <line x1="12" y1="17" x2="12.01" y2="17" />
+                          </svg>
+                          停滞中</span
+                        >
+                      }
+                      @if (task.dueDate) {
+                        @let ds = dueDateStatus(task);
+                        <span
+                          class="meta-chip"
+                          [class.overdue]="ds === 'overdue'"
+                          [class.today]="ds === 'today'"
+                          [class.soon]="ds === 'soon'"
+                          [class.due]="ds === null"
+                        >
+                          @if (ds === 'overdue' || ds === 'today' || ds === 'soon') {
+                            <svg
+                              class="chip-icon"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
+                              <path
+                                d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                              />
+                              <line x1="12" y1="9" x2="12" y2="13" />
+                              <line x1="12" y1="17" x2="12.01" y2="17" />
+                            </svg>
+                          } @else {
+                            <svg
+                              class="chip-icon"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
+                              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                              <line x1="16" y1="2" x2="16" y2="6" />
+                              <line x1="8" y1="2" x2="8" y2="6" />
+                              <line x1="3" y1="10" x2="21" y2="10" />
+                            </svg>
+                          }
+                          {{
+                            ds === 'overdue'
+                              ? '期限切れ'
+                              : ds === 'today'
+                                ? '今日まで'
+                                : ds === 'soon'
+                                  ? 'もうすぐ'
+                                  : ''
+                          }}
+                          {{ formatDueDate(task.dueDate) }}
+                        </span>
+                      }
+                      @if (task.priority) {
+                        <span class="meta-chip priority-{{ task.priority }}">{{
+                          priorityLabel(task.priority)
+                        }}</span>
+                      }
+                    </div>
+
+                    @if (isEpic) {
+                      @let progress = tasksService.getEpicProgress(task.id);
+                      <div class="epic-info">
+                        <div class="owner">
+                          @if (task.assigneeId) {
+                            <span
+                              class="avatar"
+                              [style.background]="getMemberColor(task.assigneeId)"
+                              >{{ getMemberName(task.assigneeId).charAt(0) }}</span
+                            >
+                          }
+                          <span class="owner-details">
+                            <span class="owner-label">{{ getMemberName(task.assigneeId) }}</span>
+                          </span>
+                        </div>
+                        <div class="progress-row">
+                          <div class="progress-track">
+                            <div class="progress-fill" [style.width.%]="progress"></div>
+                          </div>
+                          <span class="progress-pct">{{ progress }}%</span>
+                        </div>
+                      </div>
+                      <div class="subtasks-section">
+                        <button
+                          class="subtasks-toggle"
+                          type="button"
+                          [attr.aria-expanded]="expandedSubtaskIds().has(task.id)"
+                          (click)="toggleSubtasks(task.id); $event.stopPropagation()"
+                        >
+                          <span>サブタスク {{ children.length }}件</span>
+                          <svg
+                            class="subtasks-chevron"
+                            [class.collapsed]="!expandedSubtaskIds().has(task.id)"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            aria-hidden="true"
+                          >
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                          </svg>
+                        </button>
+                        @if (expandedSubtaskIds().has(task.id)) {
+                          <div class="subtasks">
+                            @for (child of children; track child.id) {
+                              <div class="subtask-row" [id]="'task-' + child.id">
+                                <span
+                                  class="subtask-status"
+                                  [class.done]="getStatusColor(child.status) === 'done'"
+                                  [class.active]="getStatusColor(child.status) === 'active'"
+                                  (click)="toggleSubtaskStatus(child)"
+                                  style="cursor: pointer"
+                                  title="クリックで切り替え"
+                                >
+                                  @if (getStatusColor(child.status) === 'done') {
+                                    <svg
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="#fff"
+                                      stroke-width="3"
+                                      stroke-linecap="round"
+                                      stroke-linejoin="round"
+                                      width="10"
+                                      height="10"
+                                    >
+                                      <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                  }
+                                </span>
+                                <span
+                                  class="subtask-title"
+                                  [class.strike]="getStatusColor(child.status) === 'done'"
+                                  >{{ child.title }}</span
+                                >
+                                @if (child.estimatedHours) {
+                                  <span class="subtask-hours">{{ child.estimatedHours }}h</span>
+                                }
+                                @if (child.priority) {
+                                  <span class="subtask-priority priority-{{ child.priority }}">{{
+                                    priorityLabel(child.priority)
+                                  }}</span>
+                                }
+                                @if (child.dueDate) {
+                                  @let ds = dueDateStatus(child);
+                                  <span
+                                    class="subtask-due"
+                                    [class.overdue]="ds === 'overdue'"
+                                    [class.today]="ds === 'today'"
+                                    [class.soon]="ds === 'soon'"
+                                    >{{ formatDueDate(child.dueDate) }}</span
+                                  >
+                                }
+                                @if (child.assigneeId) {
+                                  <span
+                                    class="avatar small"
+                                    [style.background]="getMemberColor(child.assigneeId)"
+                                    >{{ getMemberName(child.assigneeId).charAt(0) }}</span
+                                  >
+                                }
+                                <button
+                                  class="edit-btn small"
+                                  (click)="openEditTask(child, $event)"
+                                >
+                                  編集
+                                </button>
+                                <button
+                                  class="delete-btn small"
+                                  (click)="deleteTask(child)"
+                                  title="削除"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            }
+                          </div>
+                        }
+                      </div>
+                    } @else {
+                      <div class="card-assignee">
+                        @if (task.assigneeId) {
+                          <span
+                            class="avatar small"
+                            [style.background]="getMemberColor(task.assigneeId)"
+                            >{{ getMemberName(task.assigneeId).charAt(0) }}</span
+                          >
+                        }
+                        <span class="assignee-label">{{ getMemberName(task.assigneeId) }}</span>
+                      </div>
+                    }
+
+                    <button
+                      class="add-trigger"
+                      (click)="toggleAddForm(task.id)"
+                      style="margin-top: 8px"
+                    >
+                      + サブタスクを追加
+                    </button>
+
+                    @if (openEpicId === task.id) {
+                      <div
+                        class="add-form"
+                        (mousedown)="$event.stopPropagation()"
+                        (touchstart)="$event.stopPropagation()"
+                        (click)="$event.stopPropagation()"
+                      >
+                        <input
+                          type="text"
+                          [(ngModel)]="newSubtaskTitle"
+                          placeholder="サブタスク名"
+                          (input)="addSubtaskError = ''"
+                          (keydown.enter)="confirmAddSubtask(task.id)"
+                        />
+                        @if (addSubtaskError) {
+                          <div class="error-text">{{ addSubtaskError }}</div>
+                        }
+                        <textarea
+                          [(ngModel)]="newSubtaskDescription"
+                          placeholder="説明（任意）"
+                          class="desc-input"
+                          rows="2"
+                        ></textarea>
+                        <select [(ngModel)]="newSubtaskAssignee">
+                          <option [ngValue]="null">担当者(なし)</option>
+                          @for (m of sortedMembers(); track m.uid) {
+                            <option [ngValue]="m.uid">
+                              {{ m.name }}({{ tasksService.getLoadPercent(m.uid) }}%)
+                            </option>
+                          }
+                        </select>
+                        <div class="input-with-unit">
+                          <input
+                            type="number"
+                            [(ngModel)]="newSubtaskHours"
+                            min="0"
+                            step="0.5"
+                            placeholder="予定（任意）"
+                          />
+                          <span class="unit">h</span>
+                        </div>
+                        <input type="date" [(ngModel)]="newSubtaskDueDate" />
+                        <select [(ngModel)]="newSubtaskPriority">
+                          <option [ngValue]="null">優先度を選ぶ(任意)</option>
+                          <option value="high">🔴 高</option>
+                          <option value="medium">🟡 中</option>
+                          <option value="low">🟢 低</option>
+                        </select>
+
+                        @if (newSubtaskAssignee) {
+                          @let pct = getLoadPct(newSubtaskAssignee);
+                          @let level = loadLevel(pct);
+                          <div class="load-preview">
+                            <span>{{ getMemberName(newSubtaskAssignee) }} 負荷</span>
+                            <div class="lp-bar">
+                              <div
+                                class="lp-fill"
+                                [class]="level"
+                                [style.width.%]="pct > 100 ? 100 : pct"
+                              ></div>
+                            </div>
+                            <span>{{ pct }}%</span>
+                          </div>
+                          @if (level === 'danger') {
+                            <div class="warning-box">
+                              <svg
+                                class="chip-icon"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                              >
+                                <path
+                                  d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                                />
+                                <line x1="12" y1="9" x2="12" y2="13" />
+                                <line x1="12" y1="17" x2="12.01" y2="17" />
+                              </svg>
+                              {{ getMemberName(newSubtaskAssignee) }}さんの負荷が{{
+                                pct
+                              }}%を超えます。
+                              @if (suggestAlternative(newSubtaskAssignee); as alt) {
+                                <br /><button
+                                  class="suggest"
+                                  (click)="newSubtaskAssignee = alt.uid"
+                                >
+                                  提案: {{ alt.name }} ({{ alt.pct }}%) に変更
+                                </button>
+                              }
+                            </div>
+                          }
+                        }
+
+                        <div class="add-form-actions">
+                          <button (click)="toggleAddForm(task.id)">キャンセル</button>
+                          <button class="confirm" (click)="confirmAddSubtask(task.id)">追加</button>
+                        </div>
+                      </div>
+                    }
+
+                    @if (canMoveTask(task)) {
+                      <div class="move-buttons">
+                        @if (status === '進行中' || status === '差し戻し中') {
+                          <button
+                            [disabled]="!canMoveTask(task)"
+                            (click)="moveTask(task, '未着手')"
+                          >
+                            ← 戻す
+                          </button>
+                        }
+                        @if (status === '完了') {
+                          <button
+                            [disabled]="!canMoveTask(task)"
+                            (click)="moveTask(task, '進行中')"
+                          >
+                            {{ viewMode() === 'compact' ? '← 戻す' : '← 進行中に戻す' }}
+                          </button>
+                        }
+                        @if (
+                          canMoveTask(task) &&
+                          status === '進行中' &&
+                          task.status !== '差し戻し中' &&
+                          !isManager()
+                        ) {
+                          <button class="review-btn" (click)="requestReview(task)">差し戻す</button>
+                        }
+                        @if (status !== '完了') {
+                          @let nextStatus = status === '未着手' ? '進行中' : '完了';
+                          @let blockedForComplete =
+                            nextStatus === '完了' && tasksService.isBlocked(task);
+                          <button
+                            [disabled]="!canMoveTask(task) || blockedForComplete"
+                            (click)="moveTask(task, nextStatus)"
+                            [class.blocked-btn]="blockedForComplete"
+                          >
+                            @if (blockedForComplete) {
+                              <svg
+                                class="btn-icon blocked-icon"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                              >
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                              </svg>
+                            }
+                            {{
+                              viewMode() === 'compact'
+                                ? '進める →'
+                                : nextStatus === '完了'
+                                  ? '完了 →'
+                                  : '進める →'
+                            }}
+                          </button>
+                        }
+                        @if (canMoveTask(task) && status === '完了') {
+                          <button class="archive-btn" (click)="archiveTask(task, $event)">
+                            アーカイブ
+                          </button>
+                        }
+                      </div>
+                    }
+
+                    @if (task.status === '差し戻し中') {
+                      <div class="review-box">
+                        <div class="review-reason">
+                          <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            width="14"
+                            height="14"
+                            style="vertical-align: -2px; flex-shrink: 0"
+                          >
+                            <path
+                              d="M21 12c0 4.97-4.03 9-9 9a8.94 8.94 0 0 1-4.24-1.06L3 21l1.06-4.76A8.94 8.94 0 0 1 3 12c0-4.97 4.03-9 9-9s9 4.03 9 9z"
+                            />
+                            <path d="M8 12h.01M12 12h.01M16 12h.01" />
+                          </svg>
+                          {{ task.reviewReason }}
+                        </div>
+                        @if (isManager()) {
+                          <div class="add-form-actions" style="margin-top: 8px">
+                            <button (click)="tasksService.rejectReview(task.id)">
+                              却下(進行中に戻す)
+                            </button>
+                            <button class="confirm" (click)="tasksService.approveReview(task.id)">
+                              承認(未着手に戻す)
+                            </button>
+                          </div>
+                        } @else {
+                          <div class="manager-only-note">上司の承認待ちです</div>
+                        }
+                      </div>
+                    }
+
+                    @if (viewMode() === 'compact') {
+                      <ng-template cdkDragPreview [matchSize]="true">
+                        <div class="compact-task-preview">
+                          <span class="compact-task-preview-title">{{ task.title }}</span>
+                          <span class="compact-task-preview-meta">
+                            @if (task.estimatedHours) {
+                              <span>{{ task.estimatedHours }}h</span>
+                            }
+                            @if (task.priority) {
+                              <span>{{ priorityLabel(task.priority) }}</span>
+                            }
+                            @if (task.dueDate) {
+                              <span>{{ formatDueDate(task.dueDate) }}</span>
+                            }
+                          </span>
+                        </div>
+                      </ng-template>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        }
+      </div>
+    </main>
+
+    @if (selectedTask()) {
+      @if (!isMobile()) {
+        <button
+          class="panel-resizer comment-panel-resizer"
+          type="button"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="コメントパネルの幅を変更"
+          [attr.aria-valuenow]="commentPanelWidth()"
+          aria-valuemin="260"
+          aria-valuemax="520"
+          (pointerdown)="startPanelResize('comment', $event)"
+          (keydown)="adjustPanelWidth('comment', $event)"
+        ></button>
+      }
+      <app-comment-panel
+        [task]="selectedTask()"
+        [style.width.px]="isMobile() ? null : commentPanelWidth()"
+        (closed)="closeCommentPanel()"
+      />
+    }
+  </div>
+</div>
+
+@if (completingTask) {
+  <div class="modal-overlay" (click)="cancelComplete()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <h3>「{{ completingTask.title }}」を完了にする</h3>
+      <p class="modal-sub">
+        見積もり: {{ completingTask.estimatedHours }}h → 実際にかかった時間は?
+      </p>
+      <div class="input-with-unit">
+        <input
+          type="number"
+          min="0"
+          step="0.5"
+          [(ngModel)]="actualHoursInput"
+          class="modal-input"
+          (keydown.enter)="confirmComplete()"
+        />
+        <span class="unit">h</span>
+      </div>
+      @if (completingTask.estimatedHours && actualHoursInput !== completingTask.estimatedHours) {
+        @let diff = actualHoursInput - completingTask.estimatedHours;
+        <div class="estimate-diff" [class.over]="diff > 0" [class.under]="diff < 0">
+          {{ diff > 0 ? '+' : '' }}{{ diff }}h（{{
+            diff > 0 ? '見積もりより多い' : '見積もりより少ない'
+          }}）
+        </div>
+      }
+      <div class="add-form-actions">
+        <button (click)="cancelComplete()">キャンセル</button>
+        <button class="confirm" (click)="confirmComplete()">完了にする</button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (pendingAdd) {
+  <div class="modal-overlay" (click)="cancelPendingAdd()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <h3>
+        <svg
+          class="chip-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          style="width: 18px; height: 18px"
+        >
+          <path
+            d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+          />
+          <line x1="12" y1="9" x2="12" y2="13" />
+          <line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+        {{ pendingAdd.name }}さんの負荷が{{ pendingAdd.pct }}%になります
+      </h3>
+      <p class="modal-sub">
+        このタスクを追加すると週の稼働可能時間を超えます。他のタスクの遅延につながる可能性があります。
+      </p>
+      @if (pendingAdd.candidates.length > 0) {
+        <div class="alt-candidates">
+          <p class="alt-label">代わりに振る（負荷が低い順）:</p>
+          @for (c of pendingAdd.candidates; track c.uid) {
+            <button type="button" class="alt-candidate-btn" (click)="switchToAlternative(c.uid)">
+              <span class="alt-candidate-name">{{ c.name }}</span>
+              <span class="alt-candidate-pct" [class]="loadLevel(c.pct)">{{ c.pct }}%</span>
+            </button>
+          }
+        </div>
+      }
+      <div class="add-form-actions">
+        <button type="button" (click)="cancelPendingAdd()">やめる</button>
+        <button type="button" class="confirm danger" (click)="proceedPendingAdd()">
+          それでも割り当てる
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (reviewingTask) {
+  <div class="modal-overlay" (click)="cancelReview()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <h3>「{{ reviewingTask.title }}」を差し戻す</h3>
+      <p class="modal-sub">なぜ今このタスクが進められないか、理由を書いてください。</p>
+      <textarea
+        [(ngModel)]="reviewReasonInput"
+        class="modal-textarea"
+        placeholder="例: 他の案件が立て込んでおり、今週中の着手が難しいです"
+        (keydown.meta.enter)="confirmReview()"
+        (keydown.control.enter)="confirmReview()"
+      ></textarea>
+      <div class="add-form-actions">
+        <span class="form-hint">Ctrl+Enter で送信</span>
+        <button type="button" (click)="cancelReview()">キャンセル</button>
+        <button type="button" class="confirm" (click)="confirmReview()">差し戻す</button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (deletingTask) {
+  <div class="modal-overlay" (click)="cancelDelete()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <h3>「{{ deletingTask.title }}」を削除しますか?</h3>
+      @if (deletingChildCount > 0) {
+        <p class="modal-sub">子タスク{{ deletingChildCount }}件も一緒に削除されます。</p>
+      } @else {
+        <p class="modal-sub">この操作は取り消せません。</p>
+      }
+      <div class="add-form-actions">
+        <button type="button" (click)="cancelDelete()">キャンセル</button>
+        <button type="button" class="confirm danger" (click)="confirmDelete()">削除する</button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (editingCapacityMember) {
+  <div class="modal-overlay" (click)="cancelCapacityEdit()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <h3>{{ editingCapacityMember.name }} さん</h3>
+      <p class="modal-sub">1週間の稼働可能時間（h）を変更します</p>
+      <input type="number" min="1" step="1" [(ngModel)]="capacityInput" class="modal-input" />
+      <div class="add-form-actions">
+        <button type="button" (click)="cancelCapacityEdit()">キャンセル</button>
+        <button type="button" class="confirm" (click)="confirmCapacityEdit()">更新</button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (editingTask) {
+  <div class="modal-overlay" (click)="cancelEditTask()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <h3>タスクの編集</h3>
+      <input
+        type="text"
+        [(ngModel)]="editTaskTitle"
+        placeholder="タスク名"
+        class="modal-input"
+        style="text-align: left; font-size: 14px"
+        (keydown.enter)="confirmEditTask()"
+      />
+      <textarea
+        [(ngModel)]="editTaskDescription"
+        placeholder="説明（任意）"
+        class="modal-textarea desc-edit"
+        rows="3"
+      ></textarea>
+      <select
+        [(ngModel)]="editTaskPriority"
+        class="modal-input"
+        style="text-align: left; font-size: 14px; margin-bottom: 12px; width: 100%"
+      >
+        <option [ngValue]="null">優先度なし</option>
+        <option value="high">🔴 高</option>
+        <option value="medium">🟡 中</option>
+        <option value="low">🟢 低</option>
+      </select>
+      <select
+        [(ngModel)]="editTaskAssignee"
+        class="modal-input"
+        style="text-align: left; font-size: 14px; margin-bottom: 12px; width: 100%"
+      >
+        <option [ngValue]="null">担当者(なし)</option>
+        @for (m of sortedMembers(); track m.uid) {
+          <option [ngValue]="m.uid">{{ m.name }}</option>
+        }
+      </select>
+      <div class="input-with-unit">
+        <input
+          type="number"
+          [(ngModel)]="editTaskHours"
+          min="0.5"
+          step="0.5"
+          placeholder="予定"
+          class="modal-input"
+          style="text-align: left; font-size: 14px"
+        />
+        <span class="unit">h</span>
+      </div>
+      <div class="form-label">締切日(任意)</div>
+      <input
+        type="date"
+        [(ngModel)]="editTaskDueDate"
+        class="modal-input"
+        style="text-align: left; font-size: 14px"
+      />
+      @if (subtaskDueDateError(); as dueDateErr) {
+        <div class="due-date-warning">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            width="13"
+            height="13"
+          >
+            <path
+              d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+            />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          {{ dueDateErr }}
+        </div>
+      }
+      @if (!editingTask.parentId) {
+        <div class="form-label">依存タスク（完了するまでブロックされる）</div>
+        <div class="blocked-by-list">
+          @for (t of availableBlockTargets(); track t.id) {
+            <label class="blocked-by-option" [class.selected]="isBlockedBySelected(t.id)">
+              <input
+                type="checkbox"
+                [checked]="isBlockedBySelected(t.id)"
+                (change)="toggleBlockedBy(t.id)"
+              />
+              <span class="blocked-by-title">{{ t.title }}</span>
+              <span class="blocked-by-assignee">{{ getMemberName(t.assigneeId) }}</span>
+            </label>
+          }
+          @if (availableBlockTargets().length === 0) {
+            <div class="blocked-by-empty">選択可能なタスクがありません</div>
+          }
+        </div>
+      }
+      <div class="add-form-actions">
+        <button type="button" (click)="cancelEditTask()">キャンセル</button>
+        <button
+          type="button"
+          class="confirm"
+          [disabled]="subtaskDueDateError()"
+          (click)="confirmEditTask()"
+        >
+          更新
+        </button>
+      </div>
+    </div>
+  </div>
+}

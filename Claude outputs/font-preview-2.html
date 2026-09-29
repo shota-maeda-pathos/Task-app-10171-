@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Task Flow + フォント候補 その2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Righteous&family=Bungee&family=Black+Ops+One&family=Monoton&family=Bebas+Neue&family=Teko:wght@600;700&family=Fredoka:wght@600;700&family=Pacifico&family=Permanent+Marker&family=Satisfy&family=Playfair+Display:wght@700&family=Cormorant+Garamond:wght@700&family=Space+Grotesk:wght@600;700&family=Sora:wght@600;700&family=Outfit:wght@600;700&family=Plus+Jakarta+Sans:wght@700&family=DM+Sans:wght@700&family=Unbounded:wght@600;700&family=Tektur:wght@600;700&family=Rubik+Mono+One&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1e2430;
+    color: #e7e9f0;
+    font-family: "Inter", sans-serif;
+    padding: 40px 24px;
+  }
+  h1 {
+    text-align: center;
+    font-size: 14px;
+    font-weight: 400;
+    color: #8b95a8;
+    margin-bottom: 8px;
+    letter-spacing: 0.05em;
+  }
+  .section-label {
+    text-align: center;
+    font-size: 11px;
+    color: #6b7280;
+    margin-bottom: 24px;
+  }
+  .section {
+    margin-bottom: 40px;
+  }
+  .section h2 {
+    font-size: 12px;
+    color: #4C5FD5;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    padding-left: 4px;
+    max-width: 1100px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 16px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .card {
+    background: #262d3a;
+    border: 1px solid #3a4254;
+    border-radius: 12px;
+    padding: 28px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: border-color 0.2s;
+  }
+  .card:hover { border-color: #4C5FD5; }
+  .font-name {
+    font-size: 11px;
+    color: #6b7280;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .preview {
+    font-size: 28px;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+  .preview .plus { color: #4C5FD5; }
+  .desc {
+    font-size: 12px;
+    color: #8b95a8;
+    line-height: 1.5;
+  }
+
+  /* 太くて力強い */
+  .f-bungee .preview { font-family: "Bungee", sans-serif; font-size: 26px; }
+  .f-blackops .preview { font-family: "Black Ops One", sans-serif; font-size: 24px; }
+  .f-bebas .preview { font-family: "Bebas Neue", sans-serif; font-size: 34px; letter-spacing: 0.08em; }
+  .f-teko .preview { font-family: "Teko", sans-serif; font-weight: 700; font-size: 34px; letter-spacing: 0.04em; }
+  .f-rubik .preview { font-family: "Rubik Mono One", monospace; font-size: 18px; letter-spacing: 0.02em; }
+
+  /* スタイリッシュ・洗練 */
+  .f-space .preview { font-family: "Space Grotesk", sans-serif; font-weight: 700; letter-spacing: 0.02em; }
+  .f-sora .preview { font-family: "Sora", sans-serif; font-weight: 700; letter-spacing: 0.02em; }
+  .f-outfit .preview { font-family: "Outfit", sans-serif; font-weight: 700; letter-spacing: 0.02em; }
+  .f-jakarta .preview { font-family: "Plus Jakarta Sans", sans-serif; font-weight: 700; letter-spacing: 0.01em; }
+  .f-dm .preview { font-family: "DM Sans", sans-serif; font-weight: 700; letter-spacing: 0.01em; }
+
+  /* 遊び心・個性派 */
+  .f-righteous .preview { font-family: "Righteous", sans-serif; }
+  .f-fredoka .preview { font-family: "Fredoka", sans-serif; font-weight: 700; }
+  .f-unbounded .preview { font-family: "Unbounded", sans-serif; font-weight: 700; font-size: 22px; }
+  .f-tektur .preview { font-family: "Tektur", sans-serif; font-weight: 700; font-size: 26px; letter-spacing: 0.03em; }
+  .f-monoton .preview { font-family: "Monoton", sans-serif; font-size: 28px; }
+
+  /* 手書き・筆記体 */
+  .f-pacifico .preview { font-family: "Pacifico", cursive; font-size: 30px; }
+  .f-marker .preview { font-family: "Permanent Marker", cursive; font-size: 28px; }
+  .f-satisfy .preview { font-family: "Satisfy", cursive; font-size: 34px; }
+
+  /* エレガント・セリフ */
+  .f-playfair .preview { font-family: "Playfair Display", serif; font-weight: 700; }
+  .f-cormorant .preview { font-family: "Cormorant Garamond", serif; font-weight: 700; font-size: 32px; }
+</style>
+</head>
+<body>
+  <h1>「Task Flow +」ロゴフォント候補 — 全系統</h1>
+  <div class="section-label">気になるカードの番号を教えてください</div>
+
+  <div class="section">
+    <h2>💪 太くて力強い</h2>
+    <div class="grid">
+      <div class="card f-bungee">
+        <div class="font-name">⑪ Bungee</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">ブロック体。看板っぽいインパクト</div>
+      </div>
+      <div class="card f-blackops">
+        <div class="font-name">⑫ Black Ops One</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">ミリタリー系。硬派で力強い</div>
+      </div>
+      <div class="card f-bebas">
+        <div class="font-name">⑬ Bebas Neue</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">縦長の大文字。映画ポスター感</div>
+      </div>
+      <div class="card f-teko">
+        <div class="font-name">⑭ Teko</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">縦長でスポーティ。スピード感</div>
+      </div>
+      <div class="card f-rubik">
+        <div class="font-name">⑮ Rubik Mono One</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">極太等幅。ドカンと存在感</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>✨ スタイリッシュ・洗練</h2>
+    <div class="grid">
+      <div class="card f-space">
+        <div class="font-name">⑯ Space Grotesk</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">宇宙開発系のクリーンさ。今っぽい</div>
+      </div>
+      <div class="card f-sora">
+        <div class="font-name">⑰ Sora</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">幾何学的だけど柔らかい。SaaS系に人気</div>
+      </div>
+      <div class="card f-outfit">
+        <div class="font-name">⑱ Outfit</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">丸みとシャープのバランスが絶妙</div>
+      </div>
+      <div class="card f-jakarta">
+        <div class="font-name">⑲ Plus Jakarta Sans</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">モダンUI定番。Figma感</div>
+      </div>
+      <div class="card f-dm">
+        <div class="font-name">⑳ DM Sans</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">Google推し。ニュートラルで知的</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>🎮 遊び心・個性派</h2>
+    <div class="grid">
+      <div class="card f-righteous">
+        <div class="font-name">㉑ Righteous</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">レトロモダン。温かみのあるかっこよさ</div>
+      </div>
+      <div class="card f-fredoka">
+        <div class="font-name">㉒ Fredoka</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">ぷっくり丸い。親しみやすさ重視</div>
+      </div>
+      <div class="card f-unbounded">
+        <div class="font-name">㉓ Unbounded</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">角丸の未来感。ガジェットっぽい</div>
+      </div>
+      <div class="card f-tektur">
+        <div class="font-name">㉔ Tektur</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">ピクセルとモダンの融合。ゲームUI風</div>
+      </div>
+      <div class="card f-monoton">
+        <div class="font-name">㉕ Monoton</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">ネオンサイン風。派手にキメたい時に</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>✍️ 手書き・筆記体</h2>
+    <div class="grid">
+      <div class="card f-pacifico">
+        <div class="font-name">㉖ Pacifico</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">カリフォルニア感。リラックス系</div>
+      </div>
+      <div class="card f-marker">
+        <div class="font-name">㉗ Permanent Marker</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">マーカーで書いた感じ。ラフでカッコいい</div>
+      </div>
+      <div class="card f-satisfy">
+        <div class="font-name">㉘ Satisfy</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">流れるような筆記体。エレガント</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>🎩 エレガント・セリフ</h2>
+    <div class="grid">
+      <div class="card f-playfair">
+        <div class="font-name">㉙ Playfair Display</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">クラシカルで上品。雑誌の見出し風</div>
+      </div>
+      <div class="card f-cormorant">
+        <div class="font-name">㉚ Cormorant Garamond</div>
+        <div class="preview">Task Flow <span class="plus">+</span></div>
+        <div class="desc">繊細で知的。文芸・アカデミック系</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

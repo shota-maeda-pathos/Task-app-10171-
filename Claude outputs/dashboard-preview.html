@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Task Flow + Dashboard Preview</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;600;700&display=swap');
+
+:root {
+  --ink: #1e2430;
+  --muted: #6b7280;
+  --line: #e2e6ed;
+  --active: #4c5fd5;
+  --bg: #f3f5f8;
+  --card: #ffffff;
+  --ok: #3fa37a;
+  --warn: #c98a3a;
+  --danger: #d64545;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'IBM Plex Sans JP', sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+/* ── Sticky Header ── */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  height: 52px;
+  background: #1e2430;
+  color: #fff;
+}
+.app-header .logo {
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.app-header .logo span { color: #8b9aff; }
+.app-header nav { display: flex; gap: 6px; }
+.app-header nav button {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #ccc;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.app-header nav button.active {
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+  border-color: rgba(255,255,255,0.25);
+}
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: #aaa;
+}
+.user-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--active);
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600;
+}
+
+/* ── Dashboard ── */
+.dashboard-page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 40px 28px;
+}
+
+.dashboard-header {
+  margin-bottom: 32px;
+}
+.dashboard-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+.dashboard-header .sub {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Summary */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 36px;
+}
+.summary-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 20px 22px;
+}
+.summary-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.summary-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1;
+  margin-bottom: 10px;
+}
+.summary-value .unit {
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-left: 2px;
+}
+.summary-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.progress-track {
+  height: 6px;
+  background: var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--active);
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+
+/* Section */
+.section {
+  margin-bottom: 40px;
+}
+.section h2 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 0 0 16px;
+}
+
+/* Load */
+.load-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.load-row {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.load-member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 160px;
+}
+.avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.load-name {
+  font-size: 13.5px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.load-meta {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.load-bar-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.bar-track {
+  flex: 1;
+  height: 8px;
+  background: var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+.bar-fill.ok { background: var(--ok); }
+.bar-fill.warn { background: var(--warn); }
+.bar-fill.danger { background: var(--danger); }
+
+.load-pct {
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 44px;
+  text-align: right;
+}
+.load-pct.ok { color: var(--ok); }
+.load-pct.warn { color: var(--warn); }
+.load-pct.danger { color: var(--danger); }
+
+.you-badge {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: rgba(76, 95, 213, 0.1);
+  color: var(--active);
+  font-weight: 600;
+}
+
+/* Calendar */
+.nav-buttons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.nav-buttons button {
+  padding: 6px 12px;
+  border-radius: 7px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  font-family: inherit;
+}
+.nav-buttons button:hover {
+  border-color: var(--active);
+  color: var(--active);
+}
+.calendars {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.calendar {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+}
+.calendar-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--ink);
+}
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.cal-header {
+  text-align: center;
+  font-size: 10px;
+  color: var(--muted);
+  padding: 4px 0;
+  font-weight: 600;
+}
+.cal-cell {
+  min-height: 52px;
+  padding: 3px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+.cal-cell.today {
+  background: rgba(76, 95, 213, 0.06);
+  border-color: rgba(76, 95, 213, 0.2);
+}
+.cal-cell.has-tasks {
+  background: rgba(76, 95, 213, 0.03);
+}
+.cal-cell.empty { background: none; border: none; }
+.cal-day {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: right;
+  margin-bottom: 2px;
+}
+.cal-cell.today .cal-day {
+  color: var(--active);
+  font-weight: 700;
+}
+.cal-task {
+  font-size: 9px;
+  color: #fff;
+  padding: 1px 3px;
+  border-radius: 3px;
+  margin-bottom: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Chart */
+.chart-wrap {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  height: 160px;
+}
+.chart-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  height: 100%;
+}
+.chart-bar-wrap {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+}
+.chart-bar {
+  width: 60%;
+  background: var(--active);
+  border-radius: 6px 6px 0 0;
+  min-height: 4px;
+  transition: height 0.3s;
+}
+.chart-count {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.chart-label {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Stats */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
+}
+.stat-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+.stat-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.stat-name {
+  font-size: 13.5px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--muted);
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+.stat-val {
+  font-weight: 500;
+  color: var(--ink);
+}
+.stat-diff {
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  padding: 6px;
+  border-radius: 6px;
+}
+.stat-diff.over {
+  color: var(--danger);
+  background: rgba(214, 69, 69, 0.08);
+}
+.stat-diff.under {
+  color: var(--ok);
+  background: rgba(63, 163, 122, 0.08);
+}
+.stat-diff.exact {
+  color: var(--active);
+  background: rgba(76, 95, 213, 0.08);
+}
+.stat-accuracy {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+  margin-top: 6px;
+}
+
+/* Archive */
+.archive-section {
+  margin-top: 32px;
+  padding: 24px;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #e0e4e8;
+}
+.archive-section h2 {
+  margin-top: 0;
+  font-size: 16px;
+  margin-bottom: 16px;
+  color: #333;
+}
+.archive-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.archive-table th,
+.archive-table td {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid #eee;
+  font-size: 14px;
+}
+.archive-table th {
+  background: #f9f9f9;
+  font-weight: 500;
+  color: #666;
+}
+.restore-btn {
+  padding: 6px 12px;
+  background: #f0f0f0;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  transition: background 0.2s;
+}
+.restore-btn:hover { background: #e0e0e0; }
+.delete-btn {
+  margin-left: 12px;
+  padding: 6px 12px;
+  background: #fff0f0;
+  color: #d64545;
+  border: 1px solid #ffd6d6;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  transition: background 0.2s;
+}
+.delete-btn:hover { background: #ffe0e0; }
+.assignee-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.avatar-mini {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  color: white;
+  font-size: 11px;
+  font-weight: bold;
+}
+.hours {
+  color: #555;
+  font-size: 13px;
+  background: #f4f5f7;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.empty-note {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Watermark */
+.preview-badge {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  background: var(--active);
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(76,95,213,0.3);
+  z-index: 999;
+}
+</style>
+</head>
+<body>
+
+<!-- Sticky Header -->
+<div class="app-header">
+  <div class="logo">Task Flow <span>+</span></div>
+  <nav>
+    <button>ボード</button>
+    <button class="active">ダッシュボード</button>
+  </nav>
+  <div class="header-right">
+    <span>前田 翔太</span>
+    <div class="user-avatar">前</div>
+  </div>
+</div>
+
+<div class="dashboard-page">
+  <div class="dashboard-header">
+    <h1>Dash Board</h1>
+    <p class="sub">チームの進捗と負荷を一覧で確認できます</p>
+  </div>
+
+  <!-- サマリーカード -->
+  <div class="summary-grid">
+    <div class="summary-card">
+      <div class="summary-label">全体の進捗</div>
+      <div class="summary-value">62%</div>
+      <div class="progress-track">
+        <div class="progress-fill" style="width: 62%"></div>
+      </div>
+      <div class="summary-sub">8 / 13件完了</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">今週の完了数</div>
+      <div class="summary-value">3<span class="unit">件</span></div>
+      <div class="summary-sub">直近7日間</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">チームメンバー</div>
+      <div class="summary-value">4<span class="unit">人</span></div>
+      <div class="summary-sub">稼働中</div>
+    </div>
+  </div>
+
+  <!-- チームの負荷 -->
+  <div class="section">
+    <h2>チームの負荷</h2>
+    <div class="load-list">
+      <div class="load-row">
+        <div class="load-member">
+          <span class="avatar" style="background: #4c5fd5">前</span>
+          <div>
+            <div class="load-name">前田 翔太 <span class="you-badge">あなた</span></div>
+            <div class="load-meta">20h/週・タスク4件完了</div>
+          </div>
+        </div>
+        <div class="load-bar-wrap">
+          <div class="bar-track">
+            <div class="bar-fill warn" style="width: 85%"></div>
+          </div>
+          <span class="load-pct warn">85%</span>
+        </div>
+      </div>
+
+      <div class="load-row">
+        <div class="load-member">
+          <span class="avatar" style="background: #d64545">田</span>
+          <div>
+            <div class="load-name">田中 大樹</div>
+            <div class="load-meta">15h/週・タスク2件完了</div>
+          </div>
+        </div>
+        <div class="load-bar-wrap">
+          <div class="bar-track">
+            <div class="bar-fill danger" style="width: 100%"></div>
+          </div>
+          <span class="load-pct danger">110%</span>
+        </div>
+      </div>
+
+      <div class="load-row">
+        <div class="load-member">
+          <span class="avatar" style="background: #3fa37a">佐</span>
+          <div>
+            <div class="load-name">佐藤 美咲</div>
+            <div class="load-meta">20h/週・タスク1件完了</div>
+          </div>
+        </div>
+        <div class="load-bar-wrap">
+          <div class="bar-track">
+            <div class="bar-fill ok" style="width: 60%"></div>
+          </div>
+          <span class="load-pct ok">60%</span>
+        </div>
+      </div>
+
+      <div class="load-row">
+        <div class="load-member">
+          <span class="avatar" style="background: #c98a3a">鈴</span>
+          <div>
+            <div class="load-name">鈴木 蓮</div>
+            <div class="load-meta">10h/週・タスク1件完了</div>
+          </div>
+        </div>
+        <div class="load-bar-wrap">
+          <div class="bar-track">
+            <div class="bar-fill ok" style="width: 40%"></div>
+          </div>
+          <span class="load-pct ok">40%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 締切カレンダー -->
+  <div class="section">
+    <h2>締切カレンダー</h2>
+    <div class="nav-buttons">
+      <button>← 前へ</button>
+      <button>次へ →</button>
+    </div>
+    <div class="calendars">
+      <!-- 9月 -->
+      <div class="calendar">
+        <div class="calendar-title">2026年9月</div>
+        <div class="calendar-grid">
+          <div class="cal-header">日</div><div class="cal-header">月</div><div class="cal-header">火</div><div class="cal-header">水</div><div class="cal-header">木</div><div class="cal-header">金</div><div class="cal-header">土</div>
+          <!-- 9/1 = 火曜 → 2つ空 -->
+          <div class="cal-cell empty"></div>
+          <div class="cal-cell empty"></div>
+          <div class="cal-cell"><div class="cal-day">1</div></div>
+          <div class="cal-cell"><div class="cal-day">2</div></div>
+          <div class="cal-cell"><div class="cal-day">3</div></div>
+          <div class="cal-cell"><div class="cal-day">4</div></div>
+          <div class="cal-cell"><div class="cal-day">5</div></div>
+
+          <div class="cal-cell"><div class="cal-day">6</div></div>
+          <div class="cal-cell"><div class="cal-day">7</div></div>
+          <div class="cal-cell has-tasks"><div class="cal-day">8</div><div class="cal-task" style="background:#d64545">API設計</div></div>
+          <div class="cal-cell"><div class="cal-day">9</div></div>
+          <div class="cal-cell"><div class="cal-day">10</div></div>
+          <div class="cal-cell"><div class="cal-day">11</div></div>
+          <div class="cal-cell"><div class="cal-day">12</div></div>
+
+          <div class="cal-cell"><div class="cal-day">13</div></div>
+          <div class="cal-cell"><div class="cal-day">14</div></div>
+          <div class="cal-cell has-tasks"><div class="cal-day">15</div><div class="cal-task" style="background:#c98a3a">DB移行</div></div>
+          <div class="cal-cell"><div class="cal-day">16</div></div>
+          <div class="cal-cell"><div class="cal-day">17</div></div>
+          <div class="cal-cell"><div class="cal-day">18</div></div>
+          <div class="cal-cell"><div class="cal-day">19</div></div>
+
+          <div class="cal-cell"><div class="cal-day">20</div></div>
+          <div class="cal-cell"><div class="cal-day">21</div></div>
+          <div class="cal-cell"><div class="cal-day">22</div></div>
+          <div class="cal-cell"><div class="cal-day">23</div></div>
+          <div class="cal-cell today has-tasks"><div class="cal-day">24</div><div class="cal-task" style="background:#4c5fd5">テスト実装</div></div>
+          <div class="cal-cell has-tasks"><div class="cal-day">25</div><div class="cal-task" style="background:#3fa37a">UI改善</div></div>
+          <div class="cal-cell"><div class="cal-day">26</div></div>
+
+          <div class="cal-cell"><div class="cal-day">27</div></div>
+          <div class="cal-cell has-tasks"><div class="cal-day">28</div><div class="cal-task" style="background:#d64545">レビュー</div></div>
+          <div class="cal-cell"><div class="cal-day">29</div></div>
+          <div class="cal-cell"><div class="cal-day">30</div></div>
+          <div class="cal-cell empty"></div>
+          <div class="cal-cell empty"></div>
+          <div class="cal-cell empty"></div>
+        </div>
+      </div>
+
+      <!-- 10月 -->
+      <div class="calendar">
+        <div class="calendar-title">2026年10月</div>
+        <div class="calendar-grid">
+          <div class="cal-header">日</div><div class="cal-header">月</div><div class="cal-header">火</div><div class="cal-header">水</div><div class="cal-header">木</div><div class="cal-header">金</div><div class="cal-header">土</div>
+          <!-- 10/1 = 木曜 → 4つ空 -->
+          <div class="cal-cell empty"></div>
+          <div class="cal-cell empty"></div>
+          <div class="cal-cell empty"></div>
+          <div class="cal-cell empty"></div>
+          <div class="cal-cell"><div class="cal-day">1</div></div>
+          <div class="cal-cell has-tasks"><div class="cal-day">2</div><div class="cal-task" style="background:#d64545">最終提出</div></div>
+          <div class="cal-cell"><div class="cal-day">3</div></div>
+
+          <div class="cal-cell"><div class="cal-day">4</div></div>
+          <div class="cal-cell"><div class="cal-day">5</div></div>
+          <div class="cal-cell"><div class="cal-day">6</div></div>
+          <div class="cal-cell"><div class="cal-day">7</div></div>
+          <div class="cal-cell"><div class="cal-day">8</div></div>
+          <div class="cal-cell"><div class="cal-day">9</div></div>
+          <div class="cal-cell"><div class="cal-day">10</div></div>
+
+          <div class="cal-cell"><div class="cal-day">11</div></div>
+          <div class="cal-cell"><div class="cal-day">12</div></div>
+          <div class="cal-cell"><div class="cal-day">13</div></div>
+          <div class="cal-cell"><div class="cal-day">14</div></div>
+          <div class="cal-cell"><div class="cal-day">15</div></div>
+          <div class="cal-cell"><div class="cal-day">16</div></div>
+          <div class="cal-cell"><div class="cal-day">17</div></div>
+
+          <div class="cal-cell"><div class="cal-day">18</div></div>
+          <div class="cal-cell"><div class="cal-day">19</div></div>
+          <div class="cal-cell"><div class="cal-day">20</div></div>
+          <div class="cal-cell"><div class="cal-day">21</div></div>
+          <div class="cal-cell"><div class="cal-day">22</div></div>
+          <div class="cal-cell"><div class="cal-day">23</div></div>
+          <div class="cal-cell"><div class="cal-day">24</div></div>
+
+          <div class="cal-cell"><div class="cal-day">25</div></div>
+          <div class="cal-cell"><div class="cal-day">26</div></div>
+          <div class="cal-cell"><div class="cal-day">27</div></div>
+          <div class="cal-cell"><div class="cal-day">28</div></div>
+          <div class="cal-cell"><div class="cal-day">29</div></div>
+          <div class="cal-cell"><div class="cal-day">30</div></div>
+          <div class="cal-cell"><div class="cal-day">31</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 完了推移グラフ -->
+  <div class="section">
+    <h2>完了タスクの推移（過去4週間）</h2>
+    <div class="chart-wrap">
+      <div class="chart-col">
+        <div class="chart-bar-wrap">
+          <span class="chart-count">1</span>
+          <div class="chart-bar" style="height: 20%"></div>
+        </div>
+        <div class="chart-label">9/3週</div>
+      </div>
+      <div class="chart-col">
+        <div class="chart-bar-wrap">
+          <span class="chart-count">4</span>
+          <div class="chart-bar" style="height: 80%"></div>
+        </div>
+        <div class="chart-label">9/10週</div>
+      </div>
+      <div class="chart-col">
+        <div class="chart-bar-wrap">
+          <span class="chart-count">5</span>
+          <div class="chart-bar" style="height: 100%"></div>
+        </div>
+        <div class="chart-label">9/17週</div>
+      </div>
+      <div class="chart-col">
+        <div class="chart-bar-wrap">
+          <span class="chart-count">3</span>
+          <div class="chart-bar" style="height: 60%"></div>
+        </div>
+        <div class="chart-label">9/24週</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 見積もり vs 実績 -->
+  <div class="section">
+    <h2>見積もり vs 実績</h2>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="avatar" style="background: #4c5fd5; width:28px; height:28px; font-size:11px;">前</span>
+          <span class="stat-name">前田 翔太 <span class="you-badge">あなた</span></span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">見積もり合計</span><span class="stat-val">16h</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">実績合計</span><span class="stat-val">14h</span>
+        </div>
+        <div class="stat-diff under">-2h 短縮</div>
+        <div class="stat-accuracy">見積もり精度: 114%</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="avatar" style="background: #d64545; width:28px; height:28px; font-size:11px;">田</span>
+          <span class="stat-name">田中 大樹</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">見積もり合計</span><span class="stat-val">10h</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">実績合計</span><span class="stat-val">13h</span>
+        </div>
+        <div class="stat-diff over">+3h 超過</div>
+        <div class="stat-accuracy">見積もり精度: 77%</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="avatar" style="background: #3fa37a; width:28px; height:28px; font-size:11px;">佐</span>
+          <span class="stat-name">佐藤 美咲</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">見積もり合計</span><span class="stat-val">6h</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">実績合計</span><span class="stat-val">6h</span>
+        </div>
+        <div class="stat-diff exact">見積もり通り</div>
+        <div class="stat-accuracy">見積もり精度: 100%</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="avatar" style="background: #c98a3a; width:28px; height:28px; font-size:11px;">鈴</span>
+          <span class="stat-name">鈴木 蓮</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">見積もり合計</span><span class="stat-val">4h</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">実績合計</span><span class="stat-val">5h</span>
+        </div>
+        <div class="stat-diff over">+1h 超過</div>
+        <div class="stat-accuracy">見積もり精度: 80%</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- アーカイブ済みタスク -->
+  <div class="archive-section">
+    <h2>アーカイブ済みタスク (3)</h2>
+    <table class="archive-table">
+      <thead>
+        <tr>
+          <th>タスク名</th>
+          <th>担当者</th>
+          <th>見積 / 実績</th>
+          <th>　　</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>初期環境構築</strong></td>
+          <td>
+            <div class="assignee-info">
+              <span class="avatar-mini" style="background: #4c5fd5">前</span>
+              <span>前田 翔太</span>
+            </div>
+          </td>
+          <td><span class="hours">3h / 2h</span></td>
+          <td>
+            <button class="restore-btn">↩ 完了に戻す</button>
+            <button class="delete-btn">削除</button>
+          </td>
+        </tr>
+        <tr>
+          <td><strong>要件定義ドキュメント作成</strong></td>
+          <td>
+            <div class="assignee-info">
+              <span class="avatar-mini" style="background: #d64545">田</span>
+              <span>田中 大樹</span>
+            </div>
+          </td>
+          <td><span class="hours">5h / 6h</span></td>
+          <td>
+            <button class="restore-btn">↩ 完了に戻す</button>
+            <button class="delete-btn">削除</button>
+          </td>
+        </tr>
+        <tr>
+          <td><strong>デザインカンプ作成</strong></td>
+          <td>
+            <div class="assignee-info">
+              <span class="avatar-mini" style="background: #3fa37a">佐</span>
+              <span>佐藤 美咲</span>
+            </div>
+          </td>
+          <td><span class="hours">4h / 4h</span></td>
+          <td>
+            <button class="restore-btn">↩ 完了に戻す</button>
+            <button class="delete-btn">削除</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="preview-badge">Dashboard Preview — Task Flow +</div>
+
+</body>
+</html>

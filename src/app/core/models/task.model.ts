@@ -1,0 +1,85 @@
+import { Timestamp } from '@angular/fire/firestore';
+
+export type TaskStatus = '未着手' | '進行中' | '差し戻し中' | '完了' | 'アーカイブ済み';
+export type Priority = 'high' | 'medium' | 'low';
+
+export interface Task {
+  id: string;
+  title: string;
+  description?: string;
+
+  parentId: string | null;
+  assigneeId: string | null;
+  createdBy: string | null;
+
+  status: TaskStatus;
+
+  estimatedHours: number;
+  actualHours: number | null;
+
+  dueDate: Timestamp | null;
+  blockedBy: string[];
+
+  order: number;
+
+  createdAt: Timestamp;
+  statusUpdatedAt: Timestamp;
+
+  reviewReason?: string | null;
+  proposedDueDate?: Timestamp | null;
+
+  priority: Priority | null;
+}
+
+export interface Member {
+  uid: string;
+  name: string;
+  role: 'manager' | 'member';
+  weeklyCapacityHours: number;
+  avatarColor: string;
+  theme?: string;
+}
+
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  text: string;
+  authorId: string;
+  authorName: string;
+  createdAt: Timestamp;
+  reactions?: Record<string, string[]>; // emoji -> uid[]
+}
+
+export interface TaskAttachment {
+  id: string;
+  taskId: string;
+  fileName: string;
+  fileType: string;       // MIME type
+  fileSize: number;       // bytes
+  dataUrl: string;        // base64 data URL (small files)
+  authorId: string;
+  authorName: string;
+  createdAt: Timestamp;
+}
+
+export interface TaskActivity {
+  id: string;
+  taskId: string;
+  type: 'status_change' | 'assignee_change' | 'priority_change' | 'completed' | 'created' | 'review_request' | 'review_approve' | 'review_reject';
+  authorId: string;
+  authorName: string;
+  oldValue?: string | null;
+  newValue?: string | null;
+  createdAt: Timestamp;
+}
+
+export interface TaskNotification {
+  id: string;
+  taskId: string;
+  taskTitle: string;
+  authorName: string;
+  text: string;
+  read: boolean;
+  createdAt: Timestamp;
+  type?: 'comment' | 'task_created' | 'returned' | 'review_approved' | 'review_rejected' | 'task_completed';
+}

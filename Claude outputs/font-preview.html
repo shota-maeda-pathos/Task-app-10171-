@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Task Flow + フォント候補</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Orbitron:wght@500;700&family=Syncopate:wght@400;700&family=Audiowide&family=Exo+2:wght@600;700&family=Chakra+Petch:wght@600;700&family=Share+Tech+Mono&family=Oxanium:wght@500;700&family=Michroma&family=Electrolize&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1e2430;
+    color: #e7e9f0;
+    font-family: "Inter", sans-serif;
+    padding: 40px 24px;
+  }
+  h1 {
+    text-align: center;
+    font-size: 14px;
+    font-weight: 400;
+    color: #8b95a8;
+    margin-bottom: 32px;
+    letter-spacing: 0.05em;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 16px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .card {
+    background: #262d3a;
+    border: 1px solid #3a4254;
+    border-radius: 12px;
+    padding: 28px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: border-color 0.2s;
+  }
+  .card:hover {
+    border-color: #4C5FD5;
+  }
+  .font-name {
+    font-size: 11px;
+    color: #6b7280;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .preview {
+    font-size: 28px;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+  .desc {
+    font-size: 12px;
+    color: #8b95a8;
+    line-height: 1.5;
+  }
+
+  .f1 .preview { font-family: "Rajdhani", sans-serif; font-weight: 700; letter-spacing: 0.04em; }
+  .f2 .preview { font-family: "Orbitron", sans-serif; font-weight: 700; font-size: 24px; letter-spacing: 0.06em; }
+  .f3 .preview { font-family: "Exo 2", sans-serif; font-weight: 700; letter-spacing: 0.03em; }
+  .f4 .preview { font-family: "Chakra Petch", sans-serif; font-weight: 700; letter-spacing: 0.04em; }
+  .f5 .preview { font-family: "Oxanium", sans-serif; font-weight: 700; letter-spacing: 0.03em; }
+  .f6 .preview { font-family: "Electrolize", sans-serif; letter-spacing: 0.05em; }
+  .f7 .preview { font-family: "Michroma", sans-serif; font-size: 20px; letter-spacing: 0.08em; }
+  .f8 .preview { font-family: "Share Tech Mono", monospace; letter-spacing: 0.06em; }
+  .f9 .preview { font-family: "Syncopate", sans-serif; font-weight: 700; font-size: 20px; letter-spacing: 0.04em; }
+  .f10 .preview { font-family: "Audiowide", sans-serif; font-size: 24px; letter-spacing: 0.03em; }
+
+  /* +を目立たせるバリエーション */
+  .preview .plus {
+    color: #4C5FD5;
+  }
+</style>
+</head>
+<body>
+  <h1>「Task Flow +」ロゴフォント候補 — ヘッダー背景で比較</h1>
+  <div class="grid">
+    <div class="card f1">
+      <div class="font-name">① Rajdhani</div>
+      <div class="preview">Task Flow <span class="plus">+</span></div>
+      <div class="desc">直線的でシャープ。テック感が強くて読みやすい</div>
+    </div>
+    <div class="card f2">
+      <div class="font-name">② Orbitron</div>
+      <div class="preview">Task Flow <span class="plus">+</span></div>
+      <div class="desc">SF・宇宙っぽい幾何学フォント。存在感バツグン</div>
+    </div>
+    <div class="card f3">
+      <div class="font-name">③ Exo 2</div>
+      <div class="preview">Task Flow <span class="plus">+</span></div>
+      <div class="desc">モダンだけど丸みもある。バランス型</div>
+    </div>
+    <div class="card f4">
+      <div class="font-name">④ Chakra Petch</div>
+      <div class="preview">Task Flow <span class="plus">+</span></div>
+      <div class="desc">タイ発のテック系フォント。角張りがカッコいい</div>
+    </div>
+    <div class="card f5">
+      <div class="font-name">⑤ Oxanium</div>
+      <div class="preview">Task Flow <span class="plus">+</span></div>
+      <div class="desc">ゲーミング寄りのシャープさ。近未来感</div>
+    </div>
+    <div class="card f6">
+      <div class="font-name">⑥ Electrolize</div>
+      <div class="preview">Task Flow <span class="plus">+</span></div>
+      <div class="desc">エレクトロニック系。細めだけどエッジが効いてる</div>
+    </div>
+    <div class="card f7">
+      <div class="font-name">⑦ Michroma</div>
+      <div class="preview">Task Flow <span class="plus">+</span></div>
+      <div class="desc">幾何学的で均一。クリーンなテック感</div>
+    </div>
+    <div class="card f8">
+      <div class="font-name">⑧ Share Tech Mono</div>
+      <div class="preview">Task Flow <span class="plus">+</span></div>
+      <div class="desc">等幅のコード系。エンジニアっぽい</div>
+    </div>
+    <div class="card f9">
+      <div class="font-name">⑨ Syncopate</div>
+      <div class="preview">Task Flow <span class="plus">+</span></div>
+      <div class="desc">ワイドで堂々とした存在感。高級テック感</div>
+    </div>
+    <div class="card f10">
+      <div class="font-name">⑩ Audiowide</div>
+      <div class="preview">Task Flow <span class="plus">+</span></div>
+      <div class="desc">レトロフューチャー。個性が強い</div>
+    </div>
+  </div>
+</body>
+</html>

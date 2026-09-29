@@ -1,0 +1,253 @@
+@if (task()) {
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">{{ task()!.title }}</div>
+      <button class="close-btn" (click)="closed.emit()">✕</button>
+    </div>
+
+    <div class="panel-tabs">
+      <button
+        class="panel-tab"
+        [class.active]="panelTab() === 'comments'"
+        (click)="panelTab.set('comments')"
+      >
+        コメント
+        @if (comments().length > 0) {
+          <span class="tab-badge">{{ comments().length }}</span>
+        }
+      </button>
+      <button
+        class="panel-tab"
+        [class.active]="panelTab() === 'history'"
+        (click)="panelTab.set('history')"
+      >
+        履歴
+        @if (activities().length > 0) {
+          <span class="tab-badge">{{ activities().length }}</span>
+        }
+      </button>
+    </div>
+
+    @if (panelTab() === 'comments') {
+      <div #commentsList class="comments-list" (scroll)="onCommentsScroll()">
+        @if (comments().length === 0) {
+          <div class="empty-note">まだコメントはありません</div>
+        }
+        @for (comment of comments(); track comment.id) {
+          <div class="comment" [class.mine]="isMyComment(comment)">
+            <div class="comment-header">
+              <span class="comment-author">{{ comment.authorName }}</span>
+              <span class="comment-time">{{ formatTime(comment.createdAt) }}</span>
+              @if (isMyComment(comment)) {
+                <button class="comment-delete" (click)="deleteComment(comment)">削除</button>
+              }
+            </div>
+            <div class="comment-text">{{ comment.text }}</div>
+            <!-- リアクション表示 -->
+            <div class="reactions-row">
+              @for (r of getReactions(comment); track r.emoji) {
+                <button
+                  class="reaction-chip"
+                  [class.mine]="r.mine"
+                  [attr.data-who]="r.names.join('、')"
+                  (click)="addReaction(comment, r.emoji)"
+                >
+                  {{ r.emoji }} <span class="reaction-count">{{ r.count }}</span>
+                </button>
+              }
+              <button class="reaction-add-btn" (click)="toggleEmojiPicker(comment.id)" title="リアクションを追加">
+                +
+              </button>
+            </div>
+            @if (showEmojiPicker === comment.id) {
+              <div class="emoji-picker">
+                @for (e of quickEmojis; track e) {
+                  <button class="emoji-btn" (click)="addReaction(comment, e)">{{ e }}</button>
+                }
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      @if (reactionError()) {
+        <div class="reaction-error">{{ reactionError() }}</div>
+      }
+
+      <!-- 添付ファイル -->
+      <div class="attachments-section">
+        <div class="attachments-header">
+          <button
+            class="attachments-toggle"
+            type="button"
+            [attr.aria-expanded]="attachmentsExpanded()"
+            (click)="toggleAttachments()"
+          >
+            <span class="attachments-title">添付ファイル {{ attachments().length }}件</span>
+            <svg
+              class="attachments-chevron"
+              [class.collapsed]="!attachmentsExpanded()"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+          <input
+            #attachmentInput
+            type="file"
+            hidden
+            (change)="onFileSelect($event)"
+            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
+          />
+          <button
+            class="attach-btn"
+            [class.uploading]="attachUploading()"
+            [disabled]="attachUploading()"
+            type="button"
+            (click)="openFilePicker(attachmentInput)"
+          >
+            @if (attachUploading()) {
+              <span>アップロード中...</span>
+            } @else {
+              <svg
+                class="attach-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+              </svg>
+              <span>添付</span>
+            }
+          </button>
+        </div>
+        @if (attachError()) {
+          <div class="attach-error">{{ attachError() }}</div>
+        }
+        @if (attachmentsExpanded() && attachments().length > 0) {
+          <div class="attachments-list">
+            @for (att of attachments(); track att.id) {
+              <div class="attachment-item">
+                @if (isImage(att)) {
+                  <img [src]="att.dataUrl" class="attachment-thumb" (click)="openPreview(att)" alt="{{ att.fileName }}" />
+                } @else {
+                  <div class="attachment-icon" (click)="downloadAttachment(att)">📄</div>
+                }
+                <div class="attachment-info">
+                  <span class="attachment-name" [title]="att.fileName">{{ att.fileName }}</span>
+                  <span class="attachment-meta">{{ formatFileSize(att.fileSize) }} · {{ att.authorName }}</span>
+                </div>
+                <div class="attachment-actions">
+                  <button class="attachment-dl" (click)="downloadAttachment(att)" title="ダウンロード">⬇</button>
+                  @if (att.authorId === auth.currentUser()?.uid) {
+                    <button class="attachment-del" (click)="deleteAttachment(att)" title="削除">✕</button>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      <div class="comment-form">
+        <textarea
+          [(ngModel)]="newComment"
+          placeholder="コメントを入力..."
+          class="comment-input"
+          (keydown.meta.enter)="submitComment()"
+          (keydown.control.enter)="submitComment()"
+        ></textarea>
+        <div class="comment-form-footer">
+          <span class="comment-hint">Ctrl+Enter で送信</span>
+          <button class="submit-btn" (click)="submitComment()" [disabled]="!newComment.trim()">
+            送信
+          </button>
+        </div>
+      </div>
+    }
+
+    @if (panelTab() === 'history') {
+      <div class="history-list">
+        @if (activities().length === 0) {
+          <div class="empty-note">まだ履歴はありません</div>
+        }
+        @for (act of activities(); track $index) {
+          <div class="history-item">
+            <span class="history-icon" [class]="'type-' + act.type">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                @switch (act.type) {
+                  @case ('created') {
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="16"/>
+                    <line x1="8" y1="12" x2="16" y2="12"/>
+                  }
+                  @case ('status_change') {
+                    <polyline points="23 4 23 10 17 10"/>
+                    <polyline points="1 20 1 14 7 14"/>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                  }
+                  @case ('completed') {
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                  }
+                  @case ('assignee_change') {
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                  }
+                  @case ('priority_change') {
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                  }
+                  @case ('review_request') {
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  }
+                  @case ('review_approve') {
+                    <polyline points="20 6 9 17 4 12"/>
+                  }
+                  @case ('review_reject') {
+                    <polyline points="1 4 1 10 7 10"/>
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                  }
+                  @default {
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="16" x2="12" y2="12"/>
+                    <line x1="12" y1="8" x2="12.01" y2="8"/>
+                  }
+                }
+              </svg>
+            </span>
+            <div class="history-content">
+              <div class="history-main">
+                <span class="history-author">{{ act.authorName }}</span>
+                <span class="history-text">{{ activityLabel(act) }}</span>
+              </div>
+              <span class="history-time">{{ formatTime(act.createdAt) }}</span>
+            </div>
+          </div>
+        }
+      </div>
+    }
+  </div>
+
+  @if (previewAttachment) {
+    <div class="preview-overlay" (click)="closePreview()">
+      <div class="preview-content" (click)="$event.stopPropagation()">
+        <img [src]="previewAttachment.dataUrl" [alt]="previewAttachment.fileName" />
+        <div class="preview-footer">
+          <span>{{ previewAttachment.fileName }}</span>
+          <button (click)="downloadAttachment(previewAttachment)">ダウンロード</button>
+          <button (click)="closePreview()">閉じる</button>
+        </div>
+      </div>
+    </div>
+  }
+}

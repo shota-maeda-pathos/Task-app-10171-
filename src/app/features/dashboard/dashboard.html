@@ -1,0 +1,356 @@
+<div class="dashboard-page">
+  <div class="dashboard-header">
+    <h1>Dash Board</h1>
+    <p class="sub">チームの進捗と負荷を一覧で確認できます</p>
+  </div>
+
+  <!-- サマリーカード -->
+  <div class="summary-grid">
+    <div class="summary-card">
+      <div class="summary-label">全体の進捗</div>
+      <div class="summary-value">{{ progressPct() }}%</div>
+      <div class="progress-track">
+        <div class="progress-fill" [style.width.%]="progressPct()"></div>
+      </div>
+      <div class="summary-sub">{{ doneTasks() }} / {{ totalTasks() }}件完了</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">今週の完了数</div>
+      <div class="summary-value">{{ weeklyCompleted() }}<span class="unit">件</span></div>
+      <div class="summary-sub">直近7日間</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">チームメンバー</div>
+      <div class="summary-value">
+        {{ tasksService.members().length }}<span class="unit">人</span>
+      </div>
+      <div class="summary-sub">稼働中</div>
+    </div>
+  </div>
+
+  <!-- チームの負荷 -->
+  <div class="section">
+    <h2>チームの負荷</h2>
+    <div class="load-list">
+      <!-- 自分 -->
+      @for (stat of myStats(); track stat.member.uid) {
+        <div class="load-row clickable" (click)="goToMember(stat.member.uid)">
+          <div class="load-member">
+            <span class="avatar" [style.background]="stat.member.avatarColor">{{
+              stat.member.name.charAt(0)
+            }}</span>
+            <div>
+              <div class="load-name">
+                {{ stat.member.name }}
+                <span class="you-badge">あなた</span>
+              </div>
+              <div class="load-meta">
+                {{ stat.member.weeklyCapacityHours }}h/週・タスク{{ stat.completedCount }}件完了
+              </div>
+            </div>
+          </div>
+          <div class="load-bar-wrap">
+            <div class="bar-track">
+              <div
+                class="bar-fill"
+                [class]="loadLevel(stat.loadPct)"
+                [style.width.%]="stat.loadPct > 100 ? 100 : stat.loadPct"
+              ></div>
+            </div>
+            <span class="load-pct" [class]="loadLevel(stat.loadPct)">{{ stat.loadPct }}%</span>
+          </div>
+        </div>
+      }
+
+      <!-- 他メンバー折りたたみ -->
+      @if (otherStats().length > 0) {
+        <div class="load-toggle-row">
+          <span class="load-toggle-label">他のメンバー ({{ otherStats().length }}人)</span>
+          <button class="load-toggle-btn" (click)="toggleOtherMembers()">
+            <span class="load-toggle-arrow" [class.open]="showOtherMembers()">▴</span>
+          </button>
+        </div>
+
+        @if (showOtherMembers()) {
+          <div
+            class="load-others"
+            cdkDropList
+            [cdkDropListData]="otherStats()"
+            (cdkDropListDropped)="reorderOtherMembers($event)"
+          >
+            @for (stat of otherStats(); track stat.member.uid) {
+              <div
+                class="load-row clickable"
+                cdkDrag
+                [cdkDragData]="stat"
+                (click)="goToMember(stat.member.uid)"
+              >
+                <button
+                  class="member-drag-handle"
+                  type="button"
+                  cdkDragHandle
+                  aria-label="ドラッグしてメンバーの順番を変更"
+                  title="ドラッグして並べ替え"
+                  (click)="$event.stopPropagation()"
+                >⠿</button>
+                <div class="load-member">
+                  <span class="avatar" [style.background]="stat.member.avatarColor">{{
+                    stat.member.name.charAt(0)
+                  }}</span>
+                  <div>
+                    <div class="load-name">{{ stat.member.name }}</div>
+                    <div class="load-meta">
+                      {{ stat.member.weeklyCapacityHours }}h/週・タスク{{ stat.completedCount }}件完了
+                    </div>
+                  </div>
+                </div>
+                <div class="load-bar-wrap">
+                  <div class="bar-track">
+                    <div
+                      class="bar-fill"
+                      [class]="loadLevel(stat.loadPct)"
+                      [style.width.%]="stat.loadPct > 100 ? 100 : stat.loadPct"
+                    ></div>
+                  </div>
+                  <span class="load-pct" [class]="loadLevel(stat.loadPct)">{{ stat.loadPct }}%</span>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      }
+    </div>
+  </div>
+  <!-- カレンダー -->
+  <div class="section">
+    <h2>締切カレンダー</h2>
+    <div class="nav-buttons">
+      <button (click)="monthOffset.set(monthOffset() - 1)">← 前へ</button>
+      @if (monthOffset() !== 0) {
+        <button (click)="monthOffset.set(0)">今月に戻る</button>
+      }
+      <button (click)="monthOffset.set(monthOffset() + 1)">次へ →</button>
+    </div>
+    <div class="calendars" cdkDropListGroup>
+      @for (month of calendarMonths(); track month.label) {
+        <div class="calendar">
+          <div class="calendar-title">{{ month.label }}</div>
+          <div class="calendar-grid">
+            <div class="cal-header sun">日</div>
+            <div class="cal-header">月</div>
+            <div class="cal-header">火</div>
+            <div class="cal-header">水</div>
+            <div class="cal-header">木</div>
+            <div class="cal-header">金</div>
+            <div class="cal-header sat">土</div>
+
+            @for (day of month.days; track $index) {
+              @if (day === null) {
+                <div class="cal-cell empty"></div>
+              } @else {
+                <div
+                  class="cal-cell"
+                  [class.today]="day.isToday"
+                  [class.has-tasks]="day.tasks.length > 0"
+                  [class.sun]="day.date.getDay() === 0"
+                  [class.sat]="day.date.getDay() === 6"
+                  cdkDropList
+                  [cdkDropListData]="day"
+                  [cdkDropListSortingDisabled]="true"
+                  (cdkDropListDropped)="moveTaskDueDate($event.item.data, day.date)"
+                >
+                  <div class="cal-day">{{ day.day }}</div>
+                  @for (task of day.tasks; track task.id) {
+                    <div
+                      class="cal-task"
+                      cdkDrag
+                      [cdkDragData]="task"
+                      [style.background]="priorityColor(task.priority)"
+                      [title]="task.title + '（ドラッグして締切を変更）'"
+                      (click)="openCalTask(task); $event.stopPropagation()"
+                    >
+                      {{ task.title.length > 6 ? task.title.slice(0, 6) + '…' : task.title }}
+                    </div>
+                  }
+                </div>
+              }
+            }
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- 完了推移グラフ -->
+  <div class="section">
+    <h2>完了タスクの推移(過去4週間)</h2>
+    <div class="chart-wrap">
+      @for (week of weeklyCompletionData(); track week.label) {
+        <div class="chart-col">
+          <div class="chart-bar-wrap">
+            <span class="chart-count">{{ week.count }}</span>
+            <div
+              class="chart-bar"
+              [style.height]="
+                week.count === 0 ? '4px' : (week.count / maxWeeklyCount()) * 100 + '%'
+              "
+            ></div>
+          </div>
+          <div class="chart-label">{{ week.label }}</div>
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- 見積もりvs実績 -->
+  <div class="section">
+    <h2>見積もり vs 実績</h2>
+    @if (memberStats().every((s) => s.completedCount === 0)) {
+      <div class="empty-note">
+        完了したタスクがまだありません。タスクを完了すると見積もりとの差分が表示されます。
+      </div>
+    } @else {
+      <div class="stats-grid">
+        @for (stat of memberStats(); track stat.member.uid) {
+          @if (stat.completedCount > 0) {
+            <div class="stat-card">
+              <div class="stat-header">
+                <span class="avatar" [style.background]="stat.member.avatarColor">{{
+                  stat.member.name.charAt(0)
+                }}</span>
+                <span class="stat-name">
+                  {{ stat.member.name }}
+                  @if (isCurrentUser(stat.member.uid)) {
+                    <span class="you-badge">あなた</span>
+                  }
+                </span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">見積もり合計</span
+                ><span class="stat-val">{{ stat.totalEstimated }}h</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">実績合計</span
+                ><span class="stat-val">{{ stat.totalActual }}h</span>
+              </div>
+              <div class="stat-diff" [class]="diffClass(stat.diff)">{{ diffLabel(stat.diff) }}</div>
+              @if (stat.accuracy !== null) {
+                <div class="stat-accuracy">見積もり精度: {{ stat.accuracy }}%</div>
+              }
+            </div>
+          }
+        }
+      </div>
+    }
+  </div>
+  <!-- アーカイブ履歴セクション -->
+  <div class="archive-section">
+    <h2>アーカイブ済みタスク ({{ archivedTasks().length }})</h2>
+
+    @if (archivedTasks().length === 0) {
+      <p class="empty-message">アーカイブされたタスクはありません。</p>
+    } @else {
+      <table class="archive-table">
+        <thead>
+          <tr>
+            <th>タスク名</th>
+            <th>担当者</th>
+            <th>見積 / 実績</th>
+            <th>　　</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (task of archivedTasks(); track task.id) {
+            <tr>
+              <td>
+                <strong>{{ task.title }}</strong>
+              </td>
+              <td>
+                <div class="assignee-info">
+                  @if (task.assigneeId) {
+                    <span class="avatar-mini" [style.background]="getMemberColor(task.assigneeId)">
+                      {{ getMemberName(task.assigneeId) | slice: 0 : 1 }}
+                    </span>
+                  }
+                  <span>{{ getMemberName(task.assigneeId) }}</span>
+                </div>
+              </td>
+              <td>
+                <span class="hours">
+                  {{ task.estimatedHours || 0 }}h / {{ task.actualHours || 0 }}h
+                </span>
+              </td>
+              <td>
+                <button class="restore-btn" (click)="restoreTask(task)">↩ 完了に戻す</button>
+                <button class="delete-btn" (click)="openDeleteTask(task)">削除</button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </div>
+</div>
+
+@if (selectedCalTask) {
+  <div class="modal-overlay" (click)="closeCalTask()">
+    <div class="task-preview" (click)="$event.stopPropagation()">
+      <div class="preview-header">
+        <span
+          class="preview-priority"
+          [style.background]="priorityColor(selectedCalTask.priority)"
+        >{{ priorityLabel(selectedCalTask.priority) }}</span>
+        <button class="preview-close" (click)="closeCalTask()">✕</button>
+      </div>
+      <h3 class="preview-title">{{ selectedCalTask.title }}</h3>
+      @if (selectedCalTask.description) {
+        <p class="preview-desc">{{ selectedCalTask.description }}</p>
+      }
+      <div class="preview-info">
+        <div class="preview-row">
+          <span class="preview-label">担当</span>
+          <span class="preview-val">
+            @if (selectedCalTask.assigneeId) {
+              <span class="avatar" style="width:22px;height:22px;font-size:10px"
+                [style.background]="getMemberColor(selectedCalTask.assigneeId)">
+                {{ getMemberName(selectedCalTask.assigneeId).charAt(0) }}
+              </span>
+            }
+            {{ getMemberName(selectedCalTask.assigneeId) }}
+          </span>
+        </div>
+        <div class="preview-row">
+          <span class="preview-label">締切</span>
+          <span class="preview-val">{{ formatDueDate(selectedCalTask) }}</span>
+        </div>
+        <div class="preview-row">
+          <span class="preview-label">見積もり</span>
+          <span class="preview-val">{{ selectedCalTask.estimatedHours || 0 }}h</span>
+        </div>
+        <div class="preview-row">
+          <span class="preview-label">ステータス</span>
+          <span class="preview-val">{{ selectedCalTask.status }}</span>
+        </div>
+      </div>
+      <button class="preview-go-btn" (click)="goToTask(selectedCalTask.id)">
+        ボードで見る →
+      </button>
+    </div>
+  </div>
+}
+
+@if (deletingTask) {
+  <div class="modal-overlay" (click)="cancelDeleteTask()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <h3>「{{ deletingTask.title }}」を削除しますか？</h3>
+      <p class="delete-warning">
+        このタスクを完全に削除します。<br />
+        この操作は元に戻せません。
+      </p>
+      <div class="modal-actions">
+        <button (click)="cancelDeleteTask()">キャンセル</button>
+        <button class="danger" (click)="confirmDeleteTask()">削除する</button>
+      </div>
+    </div>
+  </div>
+}

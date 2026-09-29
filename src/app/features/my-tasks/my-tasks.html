@@ -1,0 +1,645 @@
+<div class="my-tasks">
+  <div class="my-tasks-header">
+    <h1>My Tasks</h1>
+    <p class="sub">自分の進捗と負荷を一覧で確認できます</p>
+  </div>
+
+  <div class="my-tasks-stats">
+    <div class="stat">
+      <span class="stat-label">未完了</span>
+      <span class="stat-num">{{ activeTasks().length }}</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">今日が期限</span>
+      <span class="stat-num">{{ todayDueTasks().length }}</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label danger">期限切れ</span>
+      <span class="stat-num">{{ overdueTasks().length }}</span>
+    </div>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-info">
+      <span class="progress-label">進捗</span>
+      <span class="progress-pct">{{ progressPct() }}%</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" [style.width.%]="progressPct()"></div>
+    </div>
+    <div class="progress-sub">
+      {{ allCompletedTasks().length }} / {{ rootTasks().length }}件完了
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <div class="search-wrap">
+      <svg
+        class="search-icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <circle cx="11" cy="11" r="8" />
+        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+      <input
+        type="text"
+        [value]="searchQuery()"
+        (input)="searchQuery.set($any($event.target).value)"
+        placeholder="タスク名で検索..."
+        class="search-input"
+      />
+      @if (searchQuery()) {
+        <button class="search-clear" type="button" (click)="searchQuery.set('')">x</button>
+      }
+    </div>
+
+    <div class="tab-pills">
+      <button [class.active]="tab() === 'active'" (click)="tab.set('active')">
+        未完了 ({{ activeTasks().length }})
+      </button>
+      <button [class.active]="tab() === 'completed'" (click)="tab.set('completed')">
+        完了済み ({{ myCompletedTasks().length }})
+      </button>
+    </div>
+
+    <div class="toolbar-right">
+      @if (tab() === 'active') {
+        <div class="sort-menu">
+          <button
+            class="sort-control"
+            type="button"
+            [attr.aria-expanded]="showSortMenu"
+            (click)="showSortMenu = !showSortMenu"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <polyline points="19 12 12 19 5 12" />
+            </svg>
+            <span>{{ getSortLabel() }}</span>
+          </button>
+          @if (showSortMenu) {
+            <div class="sort-options">
+              <button
+                type="button"
+                [class.selected]="sortKey() === 'default'"
+                (click)="sortKey.set('default'); showSortMenu = false"
+              >
+                期限グループ
+              </button>
+              <button
+                type="button"
+                [class.selected]="sortKey() === 'priority'"
+                (click)="sortKey.set('priority'); showSortMenu = false"
+              >
+                優先度順
+              </button>
+              <button
+                type="button"
+                [class.selected]="sortKey() === 'dueDate'"
+                (click)="sortKey.set('dueDate'); showSortMenu = false"
+              >
+                期限順
+              </button>
+              <button
+                type="button"
+                [class.selected]="sortKey() === 'status'"
+                (click)="sortKey.set('status'); showSortMenu = false"
+              >
+                ステータス順
+              </button>
+            </div>
+          }
+        </div>
+      }
+      @if (searchQuery()) {
+        <button class="filter-clear" type="button" (click)="searchQuery.set('')">クリア</button>
+      }
+    </div>
+  </div>
+
+  @if (tab() === 'active') {
+    @if (sortKey() === 'default') {
+      @if (overdueTasks().length > 0) {
+        <div class="task-section">
+          <h3 class="section-title danger">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+              />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            期限切れ
+          </h3>
+          @for (task of overdueTasks(); track task.id) {
+            <ng-container
+              *ngTemplateOutlet="taskCard; context: { $implicit: task, urgency: 'overdue' }"
+            ></ng-container>
+          }
+        </div>
+      }
+
+      @if (todayDueTasks().length > 0) {
+        <div class="task-section">
+          <h3 class="section-title warn">今日が期限</h3>
+          @for (task of todayDueTasks(); track task.id) {
+            <ng-container
+              *ngTemplateOutlet="taskCard; context: { $implicit: task, urgency: 'today' }"
+            ></ng-container>
+          }
+        </div>
+      }
+
+      @if (upcomingTasks().length > 0) {
+        <div class="task-section">
+          <h3 class="section-title">これから</h3>
+          @for (task of upcomingTasks(); track task.id) {
+            <ng-container
+              *ngTemplateOutlet="taskCard; context: { $implicit: task, urgency: '' }"
+            ></ng-container>
+          }
+        </div>
+      }
+
+      @if (noDueDateTasks().length > 0) {
+        <div class="task-section">
+          <h3 class="section-title muted">期限なし</h3>
+          @for (task of noDueDateTasks(); track task.id) {
+            <ng-container
+              *ngTemplateOutlet="taskCard; context: { $implicit: task, urgency: '' }"
+            ></ng-container>
+          }
+        </div>
+      }
+    } @else {
+      @for (task of sortedActiveTasks(); track task.id) {
+        <ng-container
+          *ngTemplateOutlet="taskCard; context: { $implicit: task, urgency: getUrgency(task) }"
+        ></ng-container>
+      }
+    }
+
+    @if (activeTasks().length === 0) {
+      <div class="empty-state">
+        <svg
+          width="48"
+          height="48"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="var(--muted)"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+          <polyline points="22 4 12 14.01 9 11.01" />
+        </svg>
+        <p>未完了タスクはありません</p>
+      </div>
+    }
+  }
+
+  @if (tab() === 'completed') {
+    @for (task of myCompletedTasks(); track task.id) {
+      <ng-container
+        *ngTemplateOutlet="taskCard; context: { $implicit: task, urgency: '' }"
+      ></ng-container>
+    }
+    @if (myCompletedTasks().length === 0) {
+      <div class="empty-state">
+        <p>完了タスクはありません</p>
+      </div>
+    }
+  }
+
+  <!-- 締切カレンダー -->
+  <div class="calendar-section">
+    <div class="calendar-header">
+      <h3 class="calendar-section-title">締切カレンダー</h3>
+      <div class="calendar-nav">
+        <button type="button" (click)="monthOffset.set(monthOffset() - 1)">← 前へ</button>
+        @if (monthOffset() !== 0) {
+          <button type="button" (click)="monthOffset.set(0)">今月</button>
+        }
+        <button type="button" (click)="monthOffset.set(monthOffset() + 1)">次へ →</button>
+      </div>
+    </div>
+    <div class="calendars">
+      @for (month of calendarMonths(); track month.label) {
+        <div class="calendar">
+          <div class="calendar-title">{{ month.label }}</div>
+          <div class="calendar-grid">
+            <div class="cal-header sun">日</div>
+            <div class="cal-header">月</div>
+            <div class="cal-header">火</div>
+            <div class="cal-header">水</div>
+            <div class="cal-header">木</div>
+            <div class="cal-header">金</div>
+            <div class="cal-header sat">土</div>
+
+            @for (day of month.days; track $index) {
+              @if (day === null) {
+                <div class="cal-cell empty"></div>
+              } @else {
+                <div
+                  class="cal-cell"
+                  [class.today]="day.isToday"
+                  [class.has-tasks]="day.tasks.length > 0"
+                  [class.sun]="day.date.getDay() === 0"
+                  [class.sat]="day.date.getDay() === 6"
+                >
+                  <div class="cal-day">{{ day.day }}</div>
+                  @for (task of day.tasks; track task.id) {
+                    <div
+                      class="cal-task"
+                      [style.background]="priorityColor(task.priority)"
+                      [title]="task.title"
+                      (click)="openCalTask(task)"
+                    >
+                      {{ task.title.length > 6 ? task.title.slice(0, 6) + '…' : task.title }}
+                    </div>
+                  }
+                </div>
+              }
+            }
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+</div>
+
+<!-- Board風カードテンプレート -->
+<ng-template #taskCard let-task let-urgency="urgency">
+  <div
+    class="card"
+    [class.overdue]="urgency === 'overdue'"
+    [class.today]="urgency === 'today'"
+    [class.completed]="task.status === '完了'"
+    [class.expanded]="expandedTaskId() === task.id"
+    (click)="toggleExpand(task.id)"
+  >
+    <!-- コンパクト表示（常時） -->
+    <div class="compact-card-heading">
+      <span class="task-status-dot" [class]="statusClass(task.status)"></span>
+      <span class="compact-card-title" [class.strike]="task.status === '完了'">{{
+        task.title
+      }}</span>
+    </div>
+    <div class="card-meta">
+      @if (task.estimatedHours) {
+        <span class="meta-chip time">{{ task.estimatedHours }}h</span>
+      }
+      @if (task.actualHours !== null && task.actualHours !== undefined) {
+        <span class="meta-chip actual">実績 {{ task.actualHours }}h</span>
+      }
+      @if (task.dueDate) {
+        @let ds = dueDateStatus(task);
+        <span
+          class="meta-chip"
+          [class.overdue]="ds === 'overdue'"
+          [class.today]="ds === 'today'"
+          [class.soon]="ds === 'soon'"
+          >{{ formatDueDate(task.dueDate) }}</span
+        >
+      }
+      @if (task.priority) {
+        <span class="meta-chip priority-{{ task.priority }}">{{
+          priorityLabel(task.priority)
+        }}</span>
+      }
+      @if (tasksService.getBlockingCount(task.id); as blocking) {
+        <span class="meta-chip blocks">{{ blocking }}件ブロック中</span>
+      }
+      @if (getBlockedLabel(task); as label) {
+        <span class="meta-chip blocked">{{ label }}</span>
+      }
+    </div>
+
+    <!-- 展開時の詳細 -->
+    @if (expandedTaskId() === task.id) {
+      <div class="card-detail" (click)="$event.stopPropagation()">
+        @if (task.description) {
+          <p class="card-description">{{ task.description }}</p>
+        }
+        <div class="detail-rows">
+          <div class="detail-row">
+            <span class="detail-label">ステータス</span>
+            <span class="detail-val">
+              <span class="task-status-dot" [class]="statusClass(task.status)"></span>
+              {{ task.status }}
+            </span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">締切</span>
+            <span class="detail-val">{{ formatDueDateFull(task) }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">見積もり</span>
+            <span class="detail-val">{{ task.estimatedHours || 0 }}h</span>
+          </div>
+          @if (task.actualHours !== null && task.actualHours !== undefined) {
+            <div class="detail-row">
+              <span class="detail-label">実績</span>
+              <span class="detail-val">{{ task.actualHours }}h</span>
+            </div>
+          }
+        </div>
+
+        <!-- サブタスク（Board互換） -->
+        @let children = getChildren(task.id);
+        @if (children.length > 0) {
+          @let epicProgress = tasksService.getEpicProgress(task.id);
+          <div class="subtasks-section">
+            <div class="subtask-progress-row">
+              <div class="subtask-progress-track">
+                <div class="subtask-progress-fill" [style.width.%]="epicProgress"></div>
+              </div>
+              <span class="subtask-progress-pct">{{ epicProgress }}%</span>
+            </div>
+            <button
+              class="subtasks-toggle"
+              type="button"
+              [attr.aria-expanded]="expandedSubtaskIds().has(task.id)"
+              (click)="toggleSubtasks(task.id); $event.stopPropagation()"
+            >
+              <span>サブタスク {{ children.length }}件</span>
+              <svg
+                class="subtasks-chevron"
+                [class.collapsed]="!expandedSubtaskIds().has(task.id)"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+            @if (expandedSubtaskIds().has(task.id)) {
+              <div class="subtasks">
+                @for (child of children; track child.id) {
+                  <div class="subtask-row">
+                    <span
+                      class="subtask-status"
+                      [class.done]="child.status === '完了'"
+                      [class.active]="child.status === '進行中'"
+                      (click)="toggleSubtaskStatus(child); $event.stopPropagation()"
+                      style="cursor: pointer"
+                      title="クリックで切り替え"
+                    >
+                      @if (child.status === '完了') {
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="#fff"
+                          stroke-width="3"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          width="10"
+                          height="10"
+                        >
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      }
+                    </span>
+                    <span
+                      class="subtask-title"
+                      [class.strike]="child.status === '完了'"
+                    >{{ child.title }}</span>
+                    @if (child.estimatedHours) {
+                      <span class="subtask-hours">{{ child.estimatedHours }}h</span>
+                    }
+                    @if (child.priority) {
+                      <span class="subtask-priority priority-{{ child.priority }}">{{
+                        priorityLabel(child.priority)
+                      }}</span>
+                    }
+                    @if (child.dueDate) {
+                      @let ds = dueDateStatus(child);
+                      <span
+                        class="subtask-due"
+                        [class.overdue]="ds === 'overdue'"
+                        [class.today]="ds === 'today'"
+                        [class.soon]="ds === 'soon'"
+                      >{{ formatDueDate(child.dueDate) }}</span>
+                    }
+                    @if (child.assigneeId) {
+                      <span
+                        class="avatar small"
+                        [style.background]="getMemberColor(child.assigneeId)"
+                      >{{ getMemberName(child.assigneeId).charAt(0) }}</span>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+
+        <!-- 差し戻しボックス（Board互換） -->
+        @if (task.status === '差し戻し中') {
+          <div class="review-box">
+            <div class="review-reason">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                width="14"
+                height="14"
+                style="vertical-align: -2px; flex-shrink: 0"
+              >
+                <path
+                  d="M21 12c0 4.97-4.03 9-9 9a8.94 8.94 0 0 1-4.24-1.06L3 21l1.06-4.76A8.94 8.94 0 0 1 3 12c0-4.97 4.03-9 9-9s9 4.03 9 9z"
+                />
+                <path d="M8 12h.01M12 12h.01M16 12h.01" />
+              </svg>
+              {{ task.reviewReason }}
+            </div>
+            @if (isManager()) {
+              <div class="review-actions">
+                <button class="review-action-btn" (click)="tasksService.rejectReview(task.id)">
+                  却下(進行中に戻す)
+                </button>
+                <button class="review-action-btn confirm" (click)="tasksService.approveReview(task.id)">
+                  承認(未着手に戻す)
+                </button>
+              </div>
+            } @else {
+              <div class="manager-only-note">上司の承認待ちです</div>
+            }
+          </div>
+        }
+
+        <!-- ステータス遷移ボタン（Board互換権限） -->
+        @if (canMoveTask(task) && task.status !== '完了' && task.status !== 'アーカイブ済み' && task.status !== '差し戻し中') {
+          <div class="move-buttons">
+            @if (task.status === '進行中') {
+              <button (click)="moveTask(task, '未着手')">← 戻す</button>
+            }
+            @if (task.status === '進行中' && !isManager()) {
+              <button class="review-btn" (click)="requestReview(task)">差し戻す</button>
+            }
+            @let nextStatus = task.status === '未着手' ? '進行中' : '完了';
+            @let blockedForComplete = nextStatus === '完了' && tasksService.isBlocked(task);
+            <button
+              [class.blocked-btn]="blockedForComplete"
+              [disabled]="blockedForComplete"
+              (click)="moveTask(task, nextStatus)"
+            >
+              @if (blockedForComplete) {
+                <svg
+                  class="btn-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              }
+              {{ nextStatus === '完了' ? '完了 →' : '進める →' }}
+            </button>
+          </div>
+        }
+        @if (canMoveTask(task) && task.status === '完了') {
+          <div class="move-buttons">
+            <button (click)="moveTask(task, '進行中')">← 進行中に戻す</button>
+          </div>
+        }
+
+        <button class="go-board-btn" (click)="goToTask(task.id)">ボードで見る →</button>
+      </div>
+    }
+  </div>
+</ng-template>
+
+<!-- 完了モーダル -->
+@if (completingTask) {
+  <div class="modal-overlay" (click)="cancelComplete()">
+    <div class="complete-modal" (click)="$event.stopPropagation()">
+      <h3 class="modal-title">「{{ completingTask.title }}」を完了</h3>
+      <p class="modal-desc">実績時間を入力してください</p>
+      <div class="actual-hours-input">
+        <label>実績時間 (h)</label>
+        <input
+          type="number"
+          [value]="actualHoursInput"
+          (input)="actualHoursInput = +$any($event.target).value"
+          min="0"
+          step="0.5"
+        />
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn cancel" (click)="cancelComplete()">キャンセル</button>
+        <button class="modal-btn confirm" (click)="confirmComplete()">完了にする</button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (reviewingTask) {
+  <div class="modal-overlay" (click)="cancelReview()">
+    <div class="complete-modal" (click)="$event.stopPropagation()">
+      <h3 class="modal-title">「{{ reviewingTask.title }}」を差し戻す</h3>
+      <p class="modal-desc">なぜ今このタスクが進められないか、理由を書いてください。</p>
+      <textarea
+        class="review-reason-input"
+        [value]="reviewReasonInput"
+        (input)="reviewReasonInput = $any($event.target).value"
+        placeholder="例: 他の案件が立て込んでおり、今週中の着手が難しいです"
+        (keydown.meta.enter)="confirmReview()"
+        (keydown.control.enter)="confirmReview()"
+      ></textarea>
+      <div class="modal-actions">
+        <span class="modal-hint">Ctrl+Enter で送信</span>
+        <button class="modal-btn cancel" (click)="cancelReview()">キャンセル</button>
+        <button
+          class="modal-btn confirm"
+          [disabled]="!reviewReasonInput.trim()"
+          (click)="confirmReview()"
+        >
+          差し戻す
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (selectedCalTask) {
+  <div class="modal-overlay" (click)="closeCalTask()">
+    <div class="task-preview" (click)="$event.stopPropagation()">
+      <div class="preview-header">
+        <span
+          class="preview-priority"
+          [style.background]="priorityColor(selectedCalTask.priority)"
+        >{{ priorityLabel(selectedCalTask.priority ?? '') }}</span>
+        <button class="preview-close" (click)="closeCalTask()">✕</button>
+      </div>
+      <h3 class="preview-title">{{ selectedCalTask.title }}</h3>
+      @if (selectedCalTask.description) {
+        <p class="preview-desc">{{ selectedCalTask.description }}</p>
+      }
+      <div class="preview-info">
+        <div class="preview-row">
+          <span class="preview-label">担当</span>
+          <span class="preview-val">
+            @if (selectedCalTask.assigneeId) {
+              <span class="avatar" style="width:22px;height:22px;font-size:10px"
+                [style.background]="getMemberColor(selectedCalTask.assigneeId)">
+                {{ getMemberName(selectedCalTask.assigneeId).charAt(0) }}
+              </span>
+            }
+            {{ getMemberName(selectedCalTask.assigneeId) }}
+          </span>
+        </div>
+        <div class="preview-row">
+          <span class="preview-label">締切</span>
+          <span class="preview-val">{{ formatDueDateFull(selectedCalTask) }}</span>
+        </div>
+        <div class="preview-row">
+          <span class="preview-label">見積もり</span>
+          <span class="preview-val">{{ selectedCalTask.estimatedHours || 0 }}h</span>
+        </div>
+        <div class="preview-row">
+          <span class="preview-label">ステータス</span>
+          <span class="preview-val">{{ selectedCalTask.status }}</span>
+        </div>
+      </div>
+      <button class="preview-go-btn" (click)="goToTask(selectedCalTask.id)">
+        ボードで見る →
+      </button>
+    </div>
+  </div>
+}

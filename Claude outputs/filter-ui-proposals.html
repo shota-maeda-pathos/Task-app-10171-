@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>フィルターバー UI 提案</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f3f5f8;
+  --card: #ffffff;
+  --ink: #1e2430;
+  --muted: #6b7280;
+  --line: #e2e6ed;
+  --ink-rgb: 30, 36, 48;
+  --accent: #4c5fd5;
+  --accent-hover: #3d4fc0;
+  --accent-rgb: 76, 95, 213;
+  --ok: #3fa37a;
+  --ok-rgb: 63, 163, 122;
+  --warn: #c98a3a;
+  --warn-rgb: 201, 138, 58;
+  --danger: #d64545;
+  --danger-rgb: 214, 69, 69;
+  --review: #9b7be8;
+  --review-rgb: 155, 123, 232;
+  --header-bg: #1e2430;
+  --header-text: #e7e9f0;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "Inter", "Noto Sans JP", -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  padding: 24px;
+}
+
+h1 {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.page-sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 32px;
+}
+
+.proposal {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  margin-bottom: 28px;
+  overflow: hidden;
+}
+.proposal-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.proposal-num {
+  background: var(--accent);
+  color: #fff;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700;
+  flex-shrink: 0;
+}
+.proposal-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.proposal-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.demo-area {
+  padding: 0;
+  background: var(--bg);
+}
+
+/* ===== カンバンヘッダー模擬 ===== */
+.mock-header {
+  background: var(--header-bg);
+  color: var(--header-text);
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mock-header .logo { font-size: 16px; }
+
+/* ===== カラムプレビュー ===== */
+.mock-board {
+  display: flex;
+  gap: 16px;
+  padding: 16px 20px;
+  min-height: 120px;
+}
+.mock-col {
+  flex: 1;
+  min-width: 0;
+}
+.mock-col-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 0 2px;
+}
+.mock-col-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+}
+.mock-col-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.mock-col-count {
+  font-size: 10px;
+  color: var(--muted);
+  background: var(--line);
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-family: "SFMono-Regular", "Consolas", monospace;
+}
+.mock-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 11px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  border-left: 3px solid var(--muted);
+}
+.mock-card.active { border-left-color: var(--accent); }
+.mock-card.done { border-left-color: var(--ok); opacity: 0.7; }
+
+/* ============================================================
+   A案: インライン常時表示（コンパクト1行）
+   ============================================================ */
+.filter-a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+  flex-wrap: wrap;
+}
+.filter-a .search-box {
+  position: relative;
+  flex: 1;
+  max-width: 200px;
+}
+.filter-a .search-box input {
+  width: 100%;
+  padding: 7px 28px 7px 30px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--ink);
+}
+.filter-a .search-box input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--card);
+}
+.filter-a .search-box .search-icon {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  width: 14px; height: 14px;
+}
+.filter-a select {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--ink);
+  cursor: pointer;
+  min-width: 90px;
+}
+.filter-a select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.filter-a .divider {
+  width: 1px;
+  height: 22px;
+  background: var(--line);
+  flex-shrink: 0;
+}
+.filter-a .clear-btn {
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  border: none;
+  background: rgba(var(--danger-rgb), 0.08);
+  color: var(--danger);
+  font-family: inherit;
+}
+.filter-a .clear-btn:hover {
+  background: rgba(var(--danger-rgb), 0.15);
+}
+
+/* ============================================================
+   B案: チップ＋ドロワー
+   ============================================================ */
+.filter-b-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+  flex-wrap: wrap;
+}
+.filter-b-bar .search-box {
+  position: relative;
+  flex: 0 1 180px;
+}
+.filter-b-bar .search-box input {
+  width: 100%;
+  padding: 6px 10px 6px 28px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--ink);
+  transition: all 0.15s;
+}
+.filter-b-bar .search-box input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--card);
+  flex-basis: 220px;
+}
+.filter-b-bar .search-box .search-icon {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  width: 13px; height: 13px;
+}
+.chip-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-family: inherit;
+  background: var(--card);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.chip-filter:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.chip-filter.active {
+  background: rgba(var(--accent-rgb), 0.08);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.chip-filter .chip-arrow {
+  font-size: 9px;
+  transition: transform 0.15s;
+}
+.chip-filter.active .chip-arrow {
+  transform: rotate(180deg);
+}
+.chip-value {
+  font-weight: 600;
+  color: var(--accent);
+  margin-left: 2px;
+}
+.chip-close {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: rgba(var(--accent-rgb), 0.15);
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  cursor: pointer;
+  margin-left: 2px;
+  border: none;
+  font-family: inherit;
+}
+.filter-b-drawer {
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+  padding: 12px 20px 14px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  animation: slideB 0.15s ease-out;
+}
+@keyframes slideB {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.filter-b-drawer select {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--ink);
+  cursor: pointer;
+  flex: 1;
+  max-width: 200px;
+}
+.filter-b-drawer select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.filter-b-drawer label {
+  font-size: 11.5px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   C案: アイコンボタン + ポップオーバー
+   ============================================================ */
+.filter-c-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+}
+.filter-c-bar .search-box {
+  position: relative;
+  flex: 1;
+  max-width: 220px;
+}
+.filter-c-bar .search-box input {
+  width: 100%;
+  padding: 7px 10px 7px 30px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--ink);
+}
+.filter-c-bar .search-box input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--card);
+}
+.filter-c-bar .search-box .search-icon {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  width: 14px; height: 14px;
+}
+.icon-btn {
+  width: 32px; height: 32px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  transition: all 0.15s;
+  position: relative;
+  flex-shrink: 0;
+}
+.icon-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.icon-btn.active {
+  background: rgba(var(--accent-rgb), 0.08);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.icon-btn .badge {
+  position: absolute;
+  top: -3px; right: -3px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 1.5px solid var(--card);
+}
+.filter-c-bar .spacer { flex: 1; }
+.sort-label {
+  font-size: 11.5px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 5px 8px;
+  border-radius: 6px;
+  transition: all 0.12s;
+}
+.sort-label:hover {
+  background: rgba(var(--accent-rgb), 0.05);
+  color: var(--accent);
+}
+.popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(var(--ink-rgb), 0.12);
+  padding: 10px 12px;
+  min-width: 220px;
+  z-index: 50;
+  animation: popIn 0.12s ease-out;
+}
+@keyframes popIn {
+  from { opacity: 0; transform: translateY(-4px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.popover label {
+  font-size: 11px;
+  color: var(--muted);
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.popover select {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--ink);
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+.popover select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.popover select:last-child { margin-bottom: 0; }
+
+/* active chips (C案) */
+.active-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.active-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  background: rgba(var(--accent-rgb), 0.08);
+  border-radius: 14px;
+  font-size: 11px;
+  color: var(--accent);
+}
+.active-chip button {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0;
+  margin-left: 2px;
+  opacity: 0.7;
+}
+.active-chip button:hover { opacity: 1; }
+
+/* ===== SVG icons ===== */
+.svg-icon { flex-shrink: 0; }
+
+/* ===== interactive states ===== */
+.demo-note {
+  padding: 10px 20px;
+  font-size: 11px;
+  color: var(--muted);
+  background: rgba(var(--accent-rgb), 0.03);
+  border-top: 1px solid var(--line);
+}
+</style>
+</head>
+<body>
+
+<h1>フィルターバー UI 提案</h1>
+<p class="page-sub">Task Flow+ のフィルターバーを3パターン提案します。クリックで操作できます。</p>
+
+<!-- ============================================================
+     A案: インライン常時表示
+     ============================================================ -->
+<div class="proposal">
+  <div class="proposal-header">
+    <span class="proposal-num">A</span>
+    <div>
+      <div class="proposal-title">インライン常時表示</div>
+      <div class="proposal-desc">検索・フィルター・ソートが常に1行で見える。ボタンクリック不要で最速アクセス。</div>
+    </div>
+  </div>
+  <div class="demo-area">
+    <div class="mock-header">
+      <span class="logo">📋</span> Task Flow +
+    </div>
+    <div class="filter-a" id="filterA">
+      <div class="search-box">
+        <svg class="search-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" placeholder="タスク名で検索…">
+      </div>
+      <div class="divider"></div>
+      <select>
+        <option>担当者: すべて</option>
+        <option>前田翔太</option>
+        <option>梅田隆太郎</option>
+        <option>大山悠輔</option>
+      </select>
+      <select>
+        <option>優先度: すべて</option>
+        <option>高</option>
+        <option>中</option>
+        <option>低</option>
+      </select>
+      <select>
+        <option>並び替え: なし</option>
+        <option>優先度順</option>
+        <option>締切順</option>
+      </select>
+      <button class="clear-btn" style="display:none" id="clearA">クリア</button>
+    </div>
+    <div class="mock-board">
+      <div class="mock-col">
+        <div class="mock-col-head">
+          <span class="mock-col-dot" style="background:var(--muted)"></span>
+          <span class="mock-col-title">未着手</span>
+          <span class="mock-col-count">2</span>
+        </div>
+        <div class="mock-card">ER図の作成</div>
+        <div class="mock-card">要件定義書</div>
+      </div>
+      <div class="mock-col">
+        <div class="mock-col-head">
+          <span class="mock-col-dot" style="background:var(--accent)"></span>
+          <span class="mock-col-title">進行中</span>
+          <span class="mock-col-count">3</span>
+        </div>
+        <div class="mock-card active">フロント実装</div>
+        <div class="mock-card active">API設計</div>
+        <div class="mock-card active">DB設計</div>
+      </div>
+      <div class="mock-col">
+        <div class="mock-col-head">
+          <span class="mock-col-dot" style="background:var(--ok)"></span>
+          <span class="mock-col-title">完了</span>
+          <span class="mock-col-count">1</span>
+        </div>
+        <div class="mock-card done">環境構築</div>
+      </div>
+    </div>
+    <div class="demo-note">💡 全フィルターが常に見えるので迷わない。項目が多いとやや幅を取る。</div>
+  </div>
+</div>
+
+<!-- ============================================================
+     B案: チップ＋展開ドロワー
+     ============================================================ -->
+<div class="proposal">
+  <div class="proposal-header">
+    <span class="proposal-num">B</span>
+    <div>
+      <div class="proposal-title">チップ＋展開ドロワー</div>
+      <div class="proposal-desc">普段はチップ表示。クリックで下にオプションが展開。選択中の値がチップに表示される。</div>
+    </div>
+  </div>
+  <div class="demo-area">
+    <div class="mock-header">
+      <span class="logo">📋</span> Task Flow +
+    </div>
+    <div class="filter-b-bar" id="filterBBar">
+      <div class="search-box">
+        <svg class="search-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" placeholder="検索…">
+      </div>
+      <button class="chip-filter" id="chipAssignee" onclick="toggleBDrawer('assignee')">
+        担当者
+        <span class="chip-arrow">▾</span>
+      </button>
+      <button class="chip-filter" id="chipPriority" onclick="toggleBDrawer('priority')">
+        優先度
+        <span class="chip-arrow">▾</span>
+      </button>
+      <button class="chip-filter" id="chipSort" onclick="toggleBDrawer('sort')">
+        並び替え
+        <span class="chip-arrow">▾</span>
+      </button>
+    </div>
+    <div class="filter-b-drawer" id="bDrawer" style="display:none">
+      <label id="bDrawerLabel">担当者</label>
+      <select id="bDrawerSelect">
+        <option>すべて</option>
+        <option>前田翔太</option>
+        <option>梅田隆太郎</option>
+      </select>
+    </div>
+    <div class="mock-board">
+      <div class="mock-col">
+        <div class="mock-col-head">
+          <span class="mock-col-dot" style="background:var(--muted)"></span>
+          <span class="mock-col-title">未着手</span>
+          <span class="mock-col-count">2</span>
+        </div>
+        <div class="mock-card">ER図の作成</div>
+        <div class="mock-card">要件定義書</div>
+      </div>
+      <div class="mock-col">
+        <div class="mock-col-head">
+          <span class="mock-col-dot" style="background:var(--accent)"></span>
+          <span class="mock-col-title">進行中</span>
+          <span class="mock-col-count">3</span>
+        </div>
+        <div class="mock-card active">フロント実装</div>
+        <div class="mock-card active">API設計</div>
+        <div class="mock-card active">DB設計</div>
+      </div>
+      <div class="mock-col">
+        <div class="mock-col-head">
+          <span class="mock-col-dot" style="background:var(--ok)"></span>
+          <span class="mock-col-title">完了</span>
+          <span class="mock-col-count">1</span>
+        </div>
+        <div class="mock-card done">環境構築</div>
+      </div>
+    </div>
+    <div class="demo-note">💡 チップをクリックして試せます。スッキリかつ選択状態が見える。</div>
+  </div>
+</div>
+
+<!-- ============================================================
+     C案: アイコンボタン + ポップオーバー
+     ============================================================ -->
+<div class="proposal">
+  <div class="proposal-header">
+    <span class="proposal-num">C</span>
+    <div>
+      <div class="proposal-title">アイコンボタン＋ポップオーバー</div>
+      <div class="proposal-desc">最小限のUI。フィルターアイコンをクリックすると小さなパネルがフロートで出る。</div>
+    </div>
+  </div>
+  <div class="demo-area">
+    <div class="mock-header">
+      <span class="logo">📋</span> Task Flow +
+    </div>
+    <div class="filter-c-bar" id="filterCBar">
+      <div class="search-box">
+        <svg class="search-icon svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" placeholder="タスク名で検索…">
+      </div>
+      <div style="position:relative">
+        <button class="icon-btn" id="filterCBtn" onclick="toggleCPopover()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+          <span class="badge" id="cBadge" style="display:none"></span>
+        </button>
+        <div class="popover" id="cPopover" style="display:none">
+          <label>担当者</label>
+          <select id="cAssignee">
+            <option value="">すべて</option>
+            <option>前田翔太</option>
+            <option>梅田隆太郎</option>
+            <option>大山悠輔</option>
+          </select>
+          <label>優先度</label>
+          <select id="cPriority">
+            <option value="">すべて</option>
+            <option>高</option>
+            <option>中</option>
+            <option>低</option>
+          </select>
+        </div>
+      </div>
+      <div class="active-chips" id="cChips"></div>
+      <span class="spacer"></span>
+      <span class="sort-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+        並び替え
+      </span>
+    </div>
+    <div class="mock-board">
+      <div class="mock-col">
+        <div class="mock-col-head">
+          <span class="mock-col-dot" style="background:var(--muted)"></span>
+          <span class="mock-col-title">未着手</span>
+          <span class="mock-col-count">2</span>
+        </div>
+        <div class="mock-card">ER図の作成</div>
+        <div class="mock-card">要件定義書</div>
+      </div>
+      <div class="mock-col">
+        <div class="mock-col-head">
+          <span class="mock-col-dot" style="background:var(--accent)"></span>
+          <span class="mock-col-title">進行中</span>
+          <span class="mock-col-count">3</span>
+        </div>
+        <div class="mock-card active">フロント実装</div>
+        <div class="mock-card active">API設計</div>
+        <div class="mock-card active">DB設計</div>
+      </div>
+      <div class="mock-col">
+        <div class="mock-col-head">
+          <span class="mock-col-dot" style="background:var(--ok)"></span>
+          <span class="mock-col-title">完了</span>
+          <span class="mock-col-count">1</span>
+        </div>
+        <div class="mock-card done">環境構築</div>
+      </div>
+    </div>
+    <div class="demo-note">💡 フィルターアイコンをクリックして試せます。ボード面積を最大限確保。</div>
+  </div>
+</div>
+
+<script>
+// B案: チップドロワー
+let bActive = null;
+const drawerData = {
+  assignee: { label: '担当者', options: ['すべて', '前田翔太', '梅田隆太郎', '大山悠輔', '森下翔太'] },
+  priority: { label: '優先度', options: ['すべて', '高', '中', '低'] },
+  sort:     { label: '並び替え', options: ['なし', '優先度順', '締切順'] }
+};
+
+function toggleBDrawer(type) {
+  const drawer = document.getElementById('bDrawer');
+  const chips = document.querySelectorAll('.chip-filter');
+
+  if (bActive === type) {
+    drawer.style.display = 'none';
+    bActive = null;
+    chips.forEach(c => c.classList.remove('active'));
+    return;
+  }
+
+  bActive = type;
+  const d = drawerData[type];
+  document.getElementById('bDrawerLabel').textContent = d.label;
+  const sel = document.getElementById('bDrawerSelect');
+  sel.innerHTML = d.options.map(o => `<option>${o}</option>`).join('');
+  drawer.style.display = 'flex';
+  drawer.style.animation = 'none';
+  drawer.offsetHeight;
+  drawer.style.animation = '';
+
+  chips.forEach(c => c.classList.remove('active'));
+  document.getElementById('chip' + type.charAt(0).toUpperCase() + type.slice(1)).classList.add('active');
+}
+
+// C案: ポップオーバー
+let cOpen = false;
+function toggleCPopover() {
+  cOpen = !cOpen;
+  const pop = document.getElementById('cPopover');
+  const btn = document.getElementById('filterCBtn');
+  pop.style.display = cOpen ? 'block' : 'none';
+  btn.classList.toggle('active', cOpen);
+}
+
+document.addEventListener('click', (e) => {
+  if (cOpen && !e.target.closest('#filterCBtn') && !e.target.closest('#cPopover')) {
+    cOpen = false;
+    document.getElementById('cPopover').style.display = 'none';
+    document.getElementById('filterCBtn').classList.remove('active');
+  }
+});
+</script>
+</body>
+</html>

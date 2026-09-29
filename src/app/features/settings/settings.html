@@ -1,0 +1,244 @@
+<div class="settings-page">
+  <div class="settings-header">
+    <h1>Setting</h1>
+    <p class="sub">プロフィールやテーマを設定できます</p>
+  </div>
+
+  <!-- プロフィール（全員） -->
+  @if (myProfile(); as me) {
+    <div class="section">
+      <h2>プロフィール</h2>
+      <div class="profile-card">
+        <span class="avatar lg" [style.background]="me.avatarColor">{{ me.name.charAt(0) }}</span>
+        <div class="profile-fields">
+          <div class="form-group">
+            <label>表示名</label>
+            <div class="inline-edit">
+              <input
+                type="text"
+                #profileNameInput
+                [value]="me.name"
+                class="form-input"
+              />
+              <button class="save-btn" (click)="updateName(profileNameInput.value)">保存</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>役職</label>
+            @if (me.role === 'manager') {
+              <span class="role-chip manager">Manager</span>
+            } @else {
+              <span class="role-chip">Member</span>
+            }
+          </div>
+          <div class="form-group">
+            <label>週の稼働時間</label>
+            <div class="inline-edit">
+              <input
+                type="number"
+                #profileCapacityInput
+                [value]="me.weeklyCapacityHours"
+                min="1"
+                max="80"
+                step="1"
+                class="form-input capacity-num"
+              />
+              <span class="capacity-unit">時間/週</span>
+              <button class="save-btn" (click)="updateCapacity(profileCapacityInput.valueAsNumber)">保存</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- テーマ（全員） -->
+  <div class="section">
+    <button class="theme-toggle" (click)="toggleThemePicker()">
+      <div class="theme-toggle-left">
+        <span class="theme-current-dot" [style.background]="currentThemeColor()"></span>
+        <div class="theme-toggle-text">
+          <span class="theme-toggle-label">テーマカラー</span>
+          <span class="theme-toggle-value">{{ currentThemeLabel() }}</span>
+        </div>
+      </div>
+      <span class="theme-toggle-arrow" [class.open]="showThemePicker">▾</span>
+    </button>
+
+    <div class="theme-grid-wrapper" [class.open]="showThemePicker">
+      <div class="theme-grid">
+        @for (theme of THEMES; track theme.id) {
+          <button
+            class="theme-card"
+            [class.selected]="currentTheme() === theme.id"
+            (click)="selectTheme(theme.id)"
+          >
+            <div class="theme-preview">
+              <div class="theme-header-bar" [style.background]="theme.headerBg"></div>
+              <div class="theme-accent-dot" [style.background]="theme.color"></div>
+            </div>
+            <span class="theme-name">{{ theme.label }}</span>
+            @if (currentTheme() === theme.id) {
+              <span class="theme-check">✓</span>
+            }
+          </button>
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- メンバー管理（マネージャーのみ） -->
+  @if (isManager()) {
+    <div class="section">
+      <h2>メンバー管理</h2>
+
+      <div
+        class="member-list"
+        cdkDropList
+        [cdkDropListData]="draggableMembers()"
+        (cdkDropListDropped)="reorderMembers($event)"
+      >
+        @if (pinnedMember(); as member) {
+          <div class="member-row">
+            <div class="member-info">
+              <span class="avatar" [style.background]="member.avatarColor">{{
+                member.name.charAt(0)
+              }}</span>
+              <div class="member-detail">
+                <div class="member-name">
+                  {{ member.name }}
+                  @if (isCurrentUser(member.uid)) {
+                    <span class="you-badge">あなた</span>
+                  }
+                </div>
+                <div class="member-meta">
+                  @if (member.role === 'manager') {
+                    <span class="role-chip manager">Manager</span>
+                  } @else {
+                    <span class="role-chip">Member</span>
+                  }
+                  <span class="capacity-label">週{{ member.weeklyCapacityHours }}h</span>
+                </div>
+              </div>
+            </div>
+            <div class="member-actions">
+              @if (!isCurrentUser(member.uid)) {
+                <button class="edit-btn" (click)="openEdit(member)">編集</button>
+                <button class="delete-btn" (click)="openDelete(member)">削除</button>
+              }
+            </div>
+          </div>
+        }
+        @for (member of draggableMembers(); track member.uid) {
+          <div class="member-row" cdkDrag [cdkDragData]="member">
+            <button
+              class="member-drag-handle"
+              type="button"
+              cdkDragHandle
+              aria-label="ドラッグしてメンバーの順番を変更"
+              title="ドラッグして並べ替え"
+            >⠿</button>
+            <div class="member-info">
+              <span class="avatar" [style.background]="member.avatarColor">{{
+                member.name.charAt(0)
+              }}</span>
+              <div class="member-detail">
+                <div class="member-name">{{ member.name }}</div>
+                <div class="member-meta">
+                  @if (member.role === 'manager') {
+                    <span class="role-chip manager">Manager</span>
+                  } @else {
+                    <span class="role-chip">Member</span>
+                  }
+                  <span class="capacity-label">週{{ member.weeklyCapacityHours }}h</span>
+                </div>
+              </div>
+            </div>
+            <div class="member-actions">
+              <button class="edit-btn" (click)="openEdit(member)">編集</button>
+              <button class="delete-btn" (click)="openDelete(member)">削除</button>
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+</div>
+
+@if (deletingMember) {
+  <div class="modal-overlay" (click)="cancelDelete()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <h3>{{ deletingMember.name }}さんを削除しますか？</h3>
+      <p class="delete-warning">
+        このメンバーをチームから削除します。<br />
+        担当タスクは「未割り当て」になります。この操作は元に戻せません。
+      </p>
+      <div class="modal-actions">
+        <button (click)="cancelDelete()">キャンセル</button>
+        <button class="danger" (click)="confirmDelete()">削除する</button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (editingMember) {
+  <div class="modal-overlay" (click)="cancelEdit()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <h3>{{ editingMember.name }} の編集</h3>
+      
+      <div class="form-group">
+        <label>名前</label>
+        <!-- [disabled]を追加して、自分自身の場合は入力をロックします -->
+        <input
+          type="text"
+          #editNameInput
+          [value]="editingMember.name"
+          [disabled]="isCurrentUser(editingMember.uid)"
+          style="
+            width: 100%;
+            box-sizing: border-box;
+            padding: 10px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-top: 8px;
+          "
+        />
+        <!-- 自分が対象の場合は案内メッセージを表示 -->
+        @if (isCurrentUser(editingMember.uid)) {
+          <div style="font-size: 11.5px; color: var(--muted); margin-top: 6px;">
+            ※自分の名前は上部のプロフィールセクションで変更してください。
+          </div>
+        }
+      </div>
+
+      <div class="form-group">
+        <label>権限</label>
+        <div class="role-select">
+          <button [class.active]="editRole === 'member'" (click)="editRole = 'member'">メンバー</button>
+          <button [class.active]="editRole === 'manager'" (click)="editRole = 'manager'">マネージャー</button>
+        </div>
+        <div class="role-note">
+          @if (editRole === 'manager') {
+            マネージャーは全てのタスクとメンバーを管理できます。
+          } @else {
+            メンバーはタスクの閲覧・更新が可能です。
+          }
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>キャパシティ</label>
+        <div class="capacity-input">
+          <input type="number" [(ngModel)]="editCapacity" min="1" max="80" step="1" />
+          <span>時間/週</span>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button (click)="cancelEdit()">キャンセル</button>
+        <button class="confirm" (click)="confirmEdit(editNameInput.value)">保存</button>
+      </div>
+    </div>
+  </div>
+}
