@@ -23,7 +23,7 @@
         <span class="summary-label">今週の負荷</span>
       </div>
       <div class="summary-metric">
-        <span class="summary-value">
+        <span class="summary-value" [ngClass]="loadLevel(focusLoadPct())">
           {{ focusLoadPct() }}<span class="summary-unit">%</span>
         </span>
       </div>

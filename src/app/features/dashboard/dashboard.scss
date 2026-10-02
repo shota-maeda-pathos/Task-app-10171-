@@ -724,7 +724,7 @@
     border-bottom: 1px solid var(--line);
 
     &.sun { color: var(--danger); }
-    &.sat { color: var(--accent); }
+    &.sat { color: #2563eb; }
 }
 
 .cal-cell {
@@ -753,9 +753,9 @@
 
     .today & { color: var(--accent); font-weight: 700; }
     .sun & { color: var(--danger); }
-    .sat & { color: var(--accent); }
+    .sat & { color: #2563eb; }
     .today.sun & { color: var(--danger); font-weight: 700; }
-    .today.sat & { color: var(--accent); font-weight: 700; }
+    .today.sat & { color: #2563eb; font-weight: 700; }
 }
 
 .cal-task {
