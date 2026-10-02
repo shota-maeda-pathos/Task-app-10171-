@@ -184,15 +184,27 @@ export class SettingsComponent {
   // クラス内のメソッドとして以下を追加します
   async updateName(newName: string): Promise<void> {
     const uid = this.auth.currentUser()?.uid;
-    if (!uid || !newName.trim()) return;
-
-    await this.tasksService.updateMemberName(uid, newName.trim());
-    this.notificationService.show('更新完了', '表示名を変更しました');
+    if (!uid) return;
+    if (!newName.trim()) {
+      this.notificationService.show('入力エラー', '表示名を入力してください');
+      return;
+    }
+    try {
+      await this.tasksService.updateMemberName(uid, newName.trim());
+      this.notificationService.show('更新完了', '表示名を変更しました');
+    } catch (e) {
+      console.error('表示名更新エラー:', e);
+      this.notificationService.show('エラー', '表示名の更新に失敗しました');
+    }
   }
 
   async updateCapacity(hours: number): Promise<void> {
     const uid = this.auth.currentUser()?.uid;
-    if (!uid || !hours || hours < 1) return;
+    if (!uid) return;
+    if (!hours || hours < 1) {
+      this.notificationService.show('入力エラー', '稼働時間は1時間以上で入力してください');
+      return;
+    }
     try {
       await this.tasksService.updateMemberCapacity(uid, hours);
       this.notificationService.show('更新完了', '稼働時間を変更しました');
@@ -255,7 +267,11 @@ export class SettingsComponent {
 
   async saveTemplate(): Promise<void> {
     const uid = this.auth.currentUser()?.uid;
-    if (!uid || !this.tplTitle.trim()) return;
+    if (!uid) return;
+    if (!this.tplTitle.trim()) {
+      this.notificationService.show('入力エラー', 'タスクタイトルを入力してください');
+      return;
+    }
 
     const data = {
       title: this.tplTitle.trim(),

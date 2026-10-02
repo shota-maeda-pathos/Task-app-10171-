@@ -405,6 +405,9 @@ $card: #ffffff;
     &.type-review_request { color: #c98a3a; }
     &.type-review_approve { color: #3fa37a; }
     &.type-review_reject { color: #d64545; }
+    &.type-review_withdraw { color: #c98a3a; }
+    &.type-focus_change { color: #e6a817; }
+    &.type-estimate_change { color: $active; }
     flex-shrink: 0;
 }
 

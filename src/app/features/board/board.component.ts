@@ -21,7 +21,7 @@ import { CommentPanelComponent } from './comment-panel/comment-panel';
 import { Task, TaskStatus, Member, Priority, RecurrenceType, TaskTemplate } from '../../core/models/task.model';
 import { Timestamp } from '@angular/fire/firestore';
 import { saveMemberOrder, sortMembersBySavedOrder } from '../../core/utils/member-order';
-import { getWeekMonday, getForecastWeekLabels } from '../../core/utils/week-utils';
+import { getWeekMonday, getWeekIndex, getForecastWeekLabels } from '../../core/utils/week-utils';
 
 type LoadLevel = 'ok' | 'warn' | 'danger';
 
@@ -234,10 +234,43 @@ export class BoardComponent {
     this.filterAssignee.set(null);
     this.filterPriority.set(null);
     this.filterFocus.set(false);
+    this.filterWeek.set(null);
     this.searchQuery.set('');
     this.sortBy.set('none');
     this.showSortMenu = false;
     this.saveUserPreference('sortBy', 'none');
+  }
+
+  toggleFilterFocus(): void {
+    const next = !this.filterFocus();
+    this.filterFocus.set(next);
+    if (next) {
+      this.filterWeek.set(0);
+    } else {
+      this.filterWeek.set(null);
+    }
+  }
+
+  setFilterWeek(value: number | null): void {
+    this.filterWeek.set(value);
+    if (value === 0) {
+      this.filterFocus.set(true);
+    } else {
+      this.filterFocus.set(false);
+    }
+  }
+
+  getTaskWeekIndex(task: Task): number | null {
+    if (task.focusThisWeek) return 0;
+    if (task.targetWeekStart) {
+      const d = task.targetWeekStart instanceof Timestamp ? task.targetWeekStart.toDate() : new Date(task.targetWeekStart);
+      return getWeekIndex(d);
+    }
+    if (task.dueDate) {
+      const d = task.dueDate instanceof Timestamp ? task.dueDate.toDate() : new Date(task.dueDate);
+      return getWeekIndex(d);
+    }
+    return null;
   }
 
   getPriorityLabel(priority: Priority): string {
@@ -293,6 +326,8 @@ export class BoardComponent {
   filterAssignee = signal<string | null>(null);
   filterPriority = signal<Priority | null>(null);
   filterFocus = signal(false);
+  filterWeek = signal<number | null>(null);
+  weekLabels = getForecastWeekLabels();
 
   searchQuery = signal('');
 
@@ -355,8 +390,12 @@ export class BoardComponent {
 
     if (this.bulkStatus) {
       for (const id of ids) {
+        const task = this.tasksService.tasks().find((t) => t.id === id);
+        if (!task || !this.canMoveTask(task)) continue;
         if (this.bulkStatus === '完了') {
-          await this.tasksService.completeTask(id, 0);
+          if (this.tasksService.isBlocked(task)) continue;
+          await this.tasksService.completeTask(id, task.estimatedHours ?? 0);
+          this.spawnRecurrence(task);
         } else {
           await this.tasksService.updateStatus(id, this.bulkStatus as TaskStatus);
         }
@@ -408,10 +447,14 @@ export class BoardComponent {
 
   async bulkDelete(): Promise<void> {
     const ids = [...this.bulkSelected()];
+    let deleted = 0;
     for (const id of ids) {
+      const task = this.tasksService.tasks().find((t) => t.id === id);
+      if (!task || !this.canMoveTask(task)) continue;
       await this.tasksService.deleteTask(id);
+      deleted++;
     }
-    this.notificationService.show('一括削除', `${ids.length}件のタスクを削除しました`);
+    this.notificationService.show('一括削除', `${deleted}件のタスクを削除しました`);
     this.bulkSelected.set(new Set());
     this.bulkDeleting = false;
   }
@@ -675,6 +718,7 @@ export class BoardComponent {
         this.editingCapacityMember.uid,
         this.capacityInput,
       );
+      this.notificationService.show('更新完了', `${this.editingCapacityMember.name}さんの稼働時間を変更しました`);
     }
     this.editingCapacityMember = null;
   }
@@ -705,6 +749,12 @@ export class BoardComponent {
     // フォーカスフィルター
     if (this.filterFocus()) {
       all = all.filter((t) => t.focusThisWeek);
+    }
+
+    // 週フィルター（フォーカス以外の週）
+    const weekFilter = this.filterWeek();
+    if (weekFilter !== null && !this.filterFocus()) {
+      all = all.filter((t) => this.getTaskWeekIndex(t) === weekFilter);
     }
 
     // 優先度・締切でソート
@@ -1130,6 +1180,7 @@ export class BoardComponent {
       this.newRootDueDate = '';
       this.newRootPriority = null;
       this.newRootFocus = false;
+      this.newRootRecurrence = null;
       this.addRootError = '';
     }
   }
@@ -1189,6 +1240,7 @@ export class BoardComponent {
     });
     this.newRootPriority = null;
     this.newRootRecurrence = null;
+    this.notificationService.show('タスク作成', `「${title}」を作成しました`);
     setTimeout(() => this.scrollToTask(taskId), 150);
   }
 
@@ -1306,6 +1358,7 @@ export class BoardComponent {
       priority: this.newSubtaskPriority,
     });
     this.newSubtaskPriority = null;
+    this.notificationService.show('サブタスク作成', `「${title}」を追加しました`);
     setTimeout(() => this.scrollToTask(taskId), 150);
   }
 
@@ -1372,6 +1425,7 @@ export class BoardComponent {
     if (!task.estimatedHours) {
       this.tasksService.completeTask(task.id, 0);
       this.spawnRecurrence(task);
+      this.notificationService.show('完了', `「${task.title}」を完了にしました`);
       return;
     }
     this.completingTask = task;
@@ -1382,9 +1436,14 @@ export class BoardComponent {
     const task = this.completingTask;
     if (!task) return;
     const hours = this.actualHoursInput;
+    if (!hours || hours < 0 || !Number.isFinite(hours)) {
+      this.notificationService.show('入力エラー', '実績時間を正しく入力してください');
+      return;
+    }
     this.completingTask = null;
     await this.tasksService.completeTask(task.id, hours);
     this.spawnRecurrence(task);
+    this.notificationService.show('完了', `「${task.title}」を完了にしました`);
   }
 
   private async spawnRecurrence(task: Task): Promise<void> {
@@ -1402,6 +1461,7 @@ export class BoardComponent {
       priority: task.priority,
       focusThisWeek: false,
       focusHours: null,
+      targetWeekStart: Timestamp.fromDate(getWeekMonday(nextDue)),
       recurrence: task.recurrence,
       recurrenceSourceId: task.recurrenceSourceId ?? task.id,
     });
@@ -1432,9 +1492,14 @@ export class BoardComponent {
   async confirmReview(): Promise<void> {
     const task = this.reviewingTask;
     const reason = this.reviewReasonInput.trim();
-    if (!task || !reason) return;
+    if (!task) return;
+    if (!reason) {
+      this.notificationService.show('入力エラー', '差し戻し理由を入力してください');
+      return;
+    }
     this.reviewingTask = null;
     await this.tasksService.requestReview(task.id, reason);
+    this.notificationService.show('差し戻し申請', `「${task.title}」の差し戻しを申請しました`);
   }
 
   cancelReview(): void {
@@ -1508,6 +1573,7 @@ export class BoardComponent {
     if (!task) return;
     this.deletingTask = null;
     await this.tasksService.deleteTask(task.id);
+    this.notificationService.show('削除完了', `「${task.title}」を削除しました`);
   }
 
   cancelDelete(): void {
@@ -1659,8 +1725,16 @@ export class BoardComponent {
   }
 
   async confirmEditTask(): Promise<void> {
-    if (!this.editingTask || !this.editTaskTitle.trim()) return;
-    if (this.subtaskDueDateError()) return;
+    if (!this.editingTask) return;
+    if (!this.editTaskTitle.trim()) {
+      this.notificationService.show('入力エラー', 'タスク名を入力してください');
+      return;
+    }
+    const dueDateErr = this.subtaskDueDateError();
+    if (dueDateErr) {
+      this.notificationService.show('入力エラー', dueDateErr);
+      return;
+    }
 
     if (this.editTaskAssignee && this.editTaskFocus) {
       const assigneeChanged = this.editTaskAssignee !== this.editingTask.assigneeId;
@@ -1698,8 +1772,9 @@ export class BoardComponent {
     const dueDate = this.editTaskDueDate
       ? Timestamp.fromDate(new Date(this.editTaskDueDate))
       : null;
+    const taskTitle = this.editTaskTitle.trim();
     await this.tasksService.updateTask(this.editingTask.id, {
-      title: this.editTaskTitle.trim(),
+      title: taskTitle,
       description: this.editTaskDescription.trim(),
       assigneeId: this.editTaskAssignee,
       estimatedHours: this.editTaskHours,
@@ -1713,6 +1788,7 @@ export class BoardComponent {
         : null,
       recurrence: this.editTaskRecurrence ?? null,
     });
+    this.notificationService.show('更新完了', `「${taskTitle}」を更新しました`);
     this.editingTask = null;
   }
 
@@ -1914,6 +1990,10 @@ export class BoardComponent {
     if (this.filterAssignee()) filtered = filtered.filter((t) => t.assigneeId === this.filterAssignee());
     if (this.filterPriority()) filtered = filtered.filter((t) => t.priority === this.filterPriority());
     if (this.filterFocus()) filtered = filtered.filter((t) => t.focusThisWeek);
+    const weekFilter = this.filterWeek();
+    if (weekFilter !== null && !this.filterFocus()) {
+      filtered = filtered.filter((t) => this.getTaskWeekIndex(t) === weekFilter);
+    }
     const query = this.searchQuery().trim().toLowerCase();
     if (query) filtered = filtered.filter((t) => t.title.toLowerCase().includes(query));
 

@@ -493,9 +493,13 @@ export class MyTasksComponent {
   async confirmReview(): Promise<void> {
     const task = this.reviewingTask;
     const reason = this.reviewReasonInput.trim();
-    if (!task || !reason) return;
-
+    if (!task) return;
+    if (!reason) {
+      this.notificationService.show('入力エラー', '差し戻し理由を入力してください');
+      return;
+    }
     await this.tasksService.requestReview(task.id, reason);
+    this.notificationService.show('差し戻し申請', `「${task.title}」の差し戻しを申請しました`);
     this.reviewingTask = null;
     this.expandedTaskId.set(null);
   }
@@ -519,12 +523,14 @@ export class MyTasksComponent {
         await this.tasksService.updateTask(task.id, { actualHours: null });
       }
       await this.tasksService.updateStatus(task.id, newStatus);
+      this.notificationService.show('ステータス変更', `「${task.title}」を${newStatus}にしました`);
     }
   }
 
   startComplete(task: Task): void {
     if (!task.estimatedHours) {
       this.tasksService.completeTask(task.id, 0);
+      this.notificationService.show('完了', `「${task.title}」を完了にしました`);
       this.expandedTaskId.set(null);
       return;
     }
@@ -537,8 +543,8 @@ export class MyTasksComponent {
     if (!task) return;
     const isSubtask = !!task.parentId;
     await this.tasksService.completeTask(task.id, this.actualHoursInput);
+    this.notificationService.show('完了', `「${task.title}」を完了にしました`);
     this.completingTask = null;
-    // サブタスクの完了ではカード展開を維持する
     if (!isSubtask) {
       this.expandedTaskId.set(null);
     }
@@ -626,6 +632,7 @@ export class MyTasksComponent {
       await this.tasksService.updateTask(task.id, { dueDate: Timestamp.fromDate(dueDate) });
     } catch (error) {
       console.error('締切日の変更に失敗しました:', error);
+      this.notificationService.show('エラー', '締切日の変更に失敗しました');
     }
   }
 

@@ -8,7 +8,7 @@
       </svg>
       Dashboard
     </h1>
-    <p class="sub">チームの進捗と負荷を一覧で確認できます</p>
+    <p class="sub">チームの進捗と負荷を一覧で確認できます。</p>
   </div>
 
   <!-- サマリーカード -->
@@ -440,50 +440,66 @@
     }
   </div>
   <!-- アーカイブ履歴セクション -->
-  <div class="archive-section">
-    <h2>アーカイブ済みタスク ({{ archivedTasks().length }})</h2>
+  <div class="section archive-section">
+    <h2 class="heading-with-icon">
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <polyline points="21 8 21 21 3 21 3 8"/>
+        <rect x="1" y="3" width="22" height="5" rx="1"/>
+        <line x1="10" y1="12" x2="14" y2="12"/>
+      </svg>
+      アーカイブ済みタスク
+      <span class="archive-count-badge">{{ archivedTasks().length }}</span>
+      <span class="archive-header-actions">
+        @if (archivedTasks().length > 0) {
+          <button class="csv-export-btn" type="button" (click)="exportArchivedCsv(); $event.stopPropagation()" title="CSVエクスポート">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            CSV
+          </button>
+        }
+        <button class="archive-chevron-btn" type="button" (click)="archiveCollapsed = !archiveCollapsed">
+          <svg viewBox="0 0 24 24" [class.open]="!archiveCollapsed">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+      </span>
+    </h2>
 
-    @if (archivedTasks().length === 0) {
-      <p class="empty-message">アーカイブされたタスクはありません。</p>
-    } @else {
-      <table class="archive-table">
-        <thead>
-          <tr>
-            <th>タスク名</th>
-            <th>担当者</th>
-            <th>見積 / 実績</th>
-            <th>　　</th>
-          </tr>
-        </thead>
-        <tbody>
+    @if (!archiveCollapsed) {
+      @if (archivedTasks().length === 0) {
+        <p class="empty-note">アーカイブされたタスクはありません。</p>
+      } @else {
+        <div class="archive-card">
           @for (task of archivedTasks(); track task.id) {
-            <tr>
-              <td>
-                <strong class="archive-task-link" (click)="openCalTask(task)">{{ task.title }}</strong>
-              </td>
-              <td>
-                <div class="assignee-info">
-                  @if (task.assigneeId) {
-                    <span class="avatar-mini" [style.background]="getMemberColor(task.assigneeId)">
-                      {{ getMemberName(task.assigneeId) | slice: 0 : 1 }}
-                    </span>
+            <div class="archive-row">
+              <span class="avatar" [style.background]="getMemberColor(task.assigneeId)">
+                {{ (getMemberName(task.assigneeId) || '未').charAt(0) }}
+              </span>
+              <div class="archive-info">
+                <div class="archive-title" (click)="openCalTask(task)">{{ task.title }}</div>
+                <div class="archive-meta">
+                  <span>{{ getMemberName(task.assigneeId) || '未割当' }}</span>
+                  @if (task.statusUpdatedAt) {
+                    <span>{{ task.statusUpdatedAt.toDate() | date: 'M/d' }} 完了</span>
                   }
-                  <span>{{ getMemberName(task.assigneeId) }}</span>
                 </div>
-              </td>
-              <td>
-                <span class="hours">
-                  {{ task.estimatedHours || 0 }}h / {{ task.actualHours || 0 }}h
-                </span>
-              </td>
-              <td>
-                <button class="restore-btn" (click)="restoreTask(task)">↩ 完了に戻す</button>
-                <button class="delete-btn" (click)="openDeleteTask(task)">削除</button>
-              </td>
-            </tr>
+              </div>
+              <span class="archive-hours" [class.over]="(task.actualHours || 0) > (task.estimatedHours || 0)">
+                {{ task.estimatedHours || 0 }}h / {{ task.actualHours || 0 }}h
+              </span>
+              <div class="archive-actions">
+                @if (canEditTask(task)) {
+                  <button class="act-restore" (click)="restoreTask(task)">復元</button>
+                  <button class="act-delete" (click)="openDeleteTask(task)">削除</button>
+                }
+              </div>
+            </div>
           }
-        </tbody>
-      </table>
+        </div>
+      }
     }
   </div>
 </div>

@@ -177,6 +177,12 @@ export class CommentPanelComponent {
         return `差し戻しを承認しました`;
       case 'review_reject':
         return `差し戻しを却下しました`;
+      case 'review_withdraw':
+        return `差し戻しを取り下げました`;
+      case 'focus_change':
+        return `今週やるを「${act.oldValue}」→「${act.newValue}」に変更`;
+      case 'estimate_change':
+        return `見積もりを「${act.oldValue}」→「${act.newValue}」に変更`;
       default:
         return '更新しました';
     }

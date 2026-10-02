@@ -1,4 +1,4 @@
-import { Injectable, inject, Injector, runInInjectionContext, computed } from '@angular/core';
+import { Injectable, inject, Injector, runInInjectionContext, computed, effect } from '@angular/core';
 import { Auth, user } from '@angular/fire/auth';
 import { Storage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from '@angular/fire/storage';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -51,6 +51,7 @@ export class TasksService {
   private membersCollection = collection(this.firestore, 'members');
   private templatesCollection = collection(this.firestore, 'taskTemplates');
   private watchedTaskIds = new Set<string>();
+  private weeklyFocusActivated = false;
   private rootReorderQueue: Promise<void> = Promise.resolve();
   private lastRootTaskOrder = 0;
   private subtaskReorderQueues = new Map<string, Promise<void>>();
@@ -71,6 +72,38 @@ export class TasksService {
     ) as Observable<Task[]>,
     { initialValue: [] as Task[] },
   );
+
+  constructor() {
+    effect(() => {
+      const tasks = this.tasks();
+      if (tasks.length > 0 && !this.weeklyFocusActivated) {
+        this.weeklyFocusActivated = true;
+        this.autoActivateWeeklyFocus(tasks);
+      }
+    });
+  }
+
+  private async autoActivateWeeklyFocus(tasks: Task[]): Promise<void> {
+    const currentMonday = getWeekMonday(new Date());
+    const targets = tasks.filter(
+      (t) =>
+        !t.focusThisWeek &&
+        t.targetWeekStart &&
+        t.status !== '完了' &&
+        t.status !== 'アーカイブ済み' &&
+        getWeekMonday(
+          t.targetWeekStart instanceof Timestamp ? t.targetWeekStart.toDate() : new Date(t.targetWeekStart as any),
+        ).getTime() === currentMonday.getTime(),
+    );
+    for (const t of targets) {
+      const ref = doc(this.firestore, 'tasks', t.id);
+      const hours = t.focusHours ?? t.estimatedHours ?? 0;
+      await updateDoc(ref, {
+        focusThisWeek: true,
+        focusHours: this.capFocusHours(hours, t.estimatedHours ?? 0),
+      });
+    }
+  }
 
   members = toSignal(
     user(this.auth).pipe(
@@ -210,7 +243,7 @@ export class TasksService {
       0,
     );
 
-    if (childTotal > (parentData.estimatedHours ?? 0)) {
+    if (childTotal !== (parentData.estimatedHours ?? 0)) {
       await updateDoc(parentRef, { estimatedHours: childTotal });
     }
   }
@@ -252,6 +285,20 @@ export class TasksService {
       const oldName = this.members().find((m) => m.uid === task.assigneeId)?.name ?? '未割当';
       const newName = this.members().find((m) => m.uid === data.assigneeId)?.name ?? '未割当';
       this.addActivity(taskId, 'assignee_change', oldName, newName).catch(() => {});
+
+      const currentUserUid = this.auth.currentUser?.uid;
+      const actor = this.members().find((m) => m.uid === currentUserUid);
+      const authorName = actor?.name ?? 'システム';
+      if (data.assigneeId && data.assigneeId !== currentUserUid) {
+        this.addNotification(data.assigneeId, {
+          taskId,
+          taskTitle: task.title ?? '名称未設定タスク',
+          authorName,
+          text: `${authorName}さんがあなたを担当に設定しました。`,
+          read: false,
+          createdAt: null as any,
+        }).catch((err) => console.error('通知作成エラー:', err));
+      }
     }
 
     if (data.priority !== undefined && task && data.priority !== task.priority) {
@@ -274,11 +321,25 @@ export class TasksService {
       }
     }
 
-    // 見積もり時間が変わった場合、親タスクも同期する
-    if (data.estimatedHours !== undefined) {
-      if (task?.parentId) {
+    if (data.estimatedHours !== undefined && task && data.estimatedHours !== task.estimatedHours) {
+      this.addActivity(
+        taskId,
+        'estimate_change',
+        `${task.estimatedHours ?? 0}h`,
+        `${data.estimatedHours}h`,
+      ).catch(() => {});
+      if (task.parentId) {
         await this.syncParentEstimate(task.parentId);
       }
+    }
+
+    if (data.focusThisWeek !== undefined && task && data.focusThisWeek !== task.focusThisWeek) {
+      this.addActivity(
+        taskId,
+        'focus_change',
+        task.focusThisWeek ? 'ON' : 'OFF',
+        data.focusThisWeek ? 'ON' : 'OFF',
+      ).catch(() => {});
     }
   }
 
@@ -397,16 +458,30 @@ export class TasksService {
     const task = this.tasks().find((t) => t.id === taskId);
     const parentId = task?.parentId ?? null;
 
-    // 子タスクがあれば道連れで消す
-    const children = this.tasks().filter((t) => t.parentId === taskId);
-    for (const child of children) {
-      await deleteDoc(doc(this.firestore, 'tasks', child.id));
-    }
-    await deleteDoc(doc(this.firestore, 'tasks', taskId));
+    await this.deleteTaskRecursive(taskId);
 
-    // 親タスクがある場合、削除後に親の見積もりを再計算して更新
     if (parentId) {
       await this.syncParentAfterDelete(parentId);
+    }
+  }
+
+  private async deleteTaskRecursive(taskId: string): Promise<void> {
+    const children = this.tasks().filter((t) => t.parentId === taskId);
+    for (const child of children) {
+      await this.deleteTaskRecursive(child.id);
+    }
+    await this.deleteTaskSubcollections(taskId);
+    await deleteDoc(doc(this.firestore, 'tasks', taskId));
+  }
+
+  private async deleteTaskSubcollections(taskId: string): Promise<void> {
+    const subcollections = ['comments', 'activities', 'attachments'];
+    for (const sub of subcollections) {
+      const col = collection(this.firestore, 'tasks', taskId, sub);
+      const snap = await getDocs(col);
+      for (const d of snap.docs) {
+        await deleteDoc(d.ref);
+      }
     }
   }
 
@@ -587,6 +662,8 @@ export class TasksService {
     const ref = doc(this.firestore, 'tasks', taskId);
     await updateDoc(ref, {
       status: '進行中',
+      reviewReason: null,
+      proposedDueDate: null,
       statusUpdatedAt: serverTimestamp(),
     });
 
@@ -787,6 +864,7 @@ export class TasksService {
         ...(clearTargetWeek ? { targetWeekStart: null } : {}),
       });
     }
+    this.addActivity(taskId, 'focus_change', focusThisWeek ? 'OFF' : 'ON', focusThisWeek ? 'ON' : 'OFF').catch(() => {});
   }
 
   getMemberWeeklyHours(memberId: string): number[] {
@@ -797,40 +875,50 @@ export class TasksService {
       if (t.status === '完了' || t.status === 'アーカイブ済み') continue;
       if (t.assigneeId !== memberId) continue;
 
-      let hours: number;
-      let weekIdx: number | null;
+      const weekIndices: { idx: number; hours: number }[] = [];
 
       if (t.focusThisWeek) {
-        weekIdx = 0;
-        hours = t.focusHours ?? t.estimatedHours ?? 0;
-      } else if (t.targetWeekStart) {
-        const target = t.targetWeekStart instanceof Timestamp ? t.targetWeekStart.toDate() : new Date(t.targetWeekStart);
-        weekIdx = getWeekIndex(target);
-        hours = t.estimatedHours ?? 0;
-      } else if (t.dueDate) {
-        const due = t.dueDate instanceof Timestamp ? t.dueDate.toDate() : new Date(t.dueDate);
-        weekIdx = getWeekIndex(due);
-        hours = t.estimatedHours ?? 0;
-      } else {
-        continue;
+        weekIndices.push({ idx: 0, hours: t.focusHours ?? t.estimatedHours ?? 0 });
       }
 
-      if (weekIdx === null) continue;
+      const scheduledWeek = t.targetWeekStart
+        ? getWeekIndex(t.targetWeekStart instanceof Timestamp ? t.targetWeekStart.toDate() : new Date(t.targetWeekStart))
+        : t.dueDate
+          ? getWeekIndex(t.dueDate instanceof Timestamp ? t.dueDate.toDate() : new Date(t.dueDate))
+          : null;
+
+      if (scheduledWeek !== null && scheduledWeek > 0 && !weekIndices.some((w) => w.idx === scheduledWeek)) {
+        weekIndices.push({ idx: scheduledWeek, hours: t.estimatedHours ?? 0 });
+      }
+
+      if (t.recurrence) {
+        const baseWeek = weekIndices.length > 0 ? Math.min(...weekIndices.map((w) => w.idx)) : 0;
+        const step = t.recurrence === 'daily' ? 1 : t.recurrence === 'weekly' ? 1 : t.recurrence === 'biweekly' ? 2 : 4;
+        for (let w = baseWeek + step; w <= 3; w += step) {
+          if (!weekIndices.some((wi) => wi.idx === w)) {
+            weekIndices.push({ idx: w, hours: t.estimatedHours ?? 0 });
+          }
+        }
+      }
+
+      if (weekIndices.length === 0) continue;
 
       const children = tasks.filter((c) => c.parentId === t.id);
-      if (children.length > 0) {
-        const assignedChildHours = children
-          .filter(
-            (c) =>
-              c.status !== '完了' &&
-              c.status !== 'アーカイブ済み' &&
-              c.assigneeId !== null,
-          )
-          .reduce((sum, c) => sum + (c.estimatedHours ?? 0), 0);
-        const remaining = Math.max(0, hours - assignedChildHours);
-        weekly[weekIdx] += remaining;
-      } else {
-        weekly[weekIdx] += hours;
+      for (const { idx, hours } of weekIndices) {
+        if (children.length > 0) {
+          const assignedChildHours = children
+            .filter(
+              (c) =>
+                c.status !== '完了' &&
+                c.status !== 'アーカイブ済み' &&
+                c.assigneeId !== null,
+            )
+            .reduce((sum, c) => sum + (c.estimatedHours ?? 0), 0);
+          const remaining = Math.max(0, hours - assignedChildHours);
+          weekly[idx] += remaining;
+        } else {
+          weekly[idx] += hours;
+        }
       }
     }
 
@@ -846,22 +934,34 @@ export class TasksService {
       if (t.assigneeId !== memberId) continue;
       if (t.parentId) continue;
 
-      let weekIdx: number | null;
+      const counted = new Set<number>();
 
       if (t.focusThisWeek) {
-        weekIdx = 0;
-      } else if (t.targetWeekStart) {
-        const target = t.targetWeekStart instanceof Timestamp ? t.targetWeekStart.toDate() : new Date(t.targetWeekStart);
-        weekIdx = getWeekIndex(target);
-      } else if (t.dueDate) {
-        const due = t.dueDate instanceof Timestamp ? t.dueDate.toDate() : new Date(t.dueDate);
-        weekIdx = getWeekIndex(due);
-      } else {
-        continue;
+        counted.add(0);
       }
 
-      if (weekIdx === null) continue;
-      counts[weekIdx]++;
+      const scheduledWeek = t.targetWeekStart
+        ? getWeekIndex(t.targetWeekStart instanceof Timestamp ? t.targetWeekStart.toDate() : new Date(t.targetWeekStart))
+        : t.dueDate
+          ? getWeekIndex(t.dueDate instanceof Timestamp ? t.dueDate.toDate() : new Date(t.dueDate))
+          : null;
+
+      if (scheduledWeek !== null && scheduledWeek > 0) {
+        counted.add(scheduledWeek);
+      }
+
+      if (t.recurrence) {
+        const baseWeek = counted.size > 0 ? Math.min(...counted) : 0;
+        const step = t.recurrence === 'daily' ? 1 : t.recurrence === 'weekly' ? 1 : t.recurrence === 'biweekly' ? 2 : 4;
+        for (let w = baseWeek + step; w <= 3; w += step) {
+          counted.add(w);
+        }
+      }
+
+      if (counted.size === 0) continue;
+      for (const idx of counted) {
+        counts[idx]++;
+      }
     }
 
     return counts;

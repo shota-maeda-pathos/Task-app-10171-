@@ -83,7 +83,9 @@ export interface TaskActivity {
     | 'review_request'
     | 'review_approve'
     | 'review_reject'
-    | 'review_withdraw';
+    | 'review_withdraw'
+    | 'focus_change'
+    | 'estimate_change';
   authorId: string;
   authorName: string;
   oldValue?: string | null;

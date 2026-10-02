@@ -9,7 +9,7 @@ import { TasksService } from './core/services/tasks.service';
 import { NotificationService } from './core/services/notification.service';
 import { Router } from '@angular/router';
 import { Timestamp } from '@angular/fire/firestore';
-import { Priority, TaskStatus, TaskTemplate } from './core/models/task.model';
+import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/models/task.model';
 
 @Component({
   selector: 'app-root',
@@ -286,6 +286,19 @@ import { Priority, TaskStatus, TaskTemplate } from './core/models/task.model';
                       <option value="low">🟢 低</option>
                     </select>
                   </div>
+                </div>
+                <div class="fab-row">
+                  <div class="fab-field">
+                    <label>繰り返し</label>
+                    <select [(ngModel)]="fabRecurrence" class="fab-input">
+                      <option [ngValue]="null">なし</option>
+                      <option value="daily">毎日</option>
+                      <option value="weekly">毎週</option>
+                      <option value="biweekly">隔週</option>
+                      <option value="monthly">毎月</option>
+                    </select>
+                  </div>
+                  <div class="fab-field"></div>
                 </div>
                 <label class="fab-focus-check">
                   <input type="checkbox" [(ngModel)]="fabFocus" />
@@ -1419,7 +1432,10 @@ export class App {
   fabPriority: Priority | null = null;
   fabStatus: TaskStatus = '未着手';
   fabFocus = false;
+  fabRecurrence: RecurrenceType | null = null;
   fabError = '';
+  fabSubmitting = false;
+  private fabTemplateSubtasks: { title: string; estimatedHours: number }[] = [];
 
   openFabModal(): void {
     this.showFabModal = true;
@@ -1431,6 +1447,7 @@ export class App {
     this.fabPriority = null;
     this.fabStatus = '未着手';
     this.fabFocus = false;
+    this.fabRecurrence = null;
     this.fabError = '';
   }
 
@@ -1443,35 +1460,53 @@ export class App {
     this.fabDescription = tpl.description || '';
     this.fabHours = tpl.estimatedHours || 1;
     this.fabPriority = tpl.priority;
+    this.fabTemplateSubtasks = tpl.subtasks?.filter((s) => s.title.trim()) ?? [];
     this.fabError = '';
   }
 
   async createTaskFromFab(): Promise<void> {
+    if (this.fabSubmitting) return;
     const title = this.fabTitle.trim();
     if (!title) {
       this.fabError = 'タスク名を入力してください';
       return;
     }
+    this.fabSubmitting = true;
     try {
       const dueDate = this.fabDueDate
         ? Timestamp.fromDate(new Date(this.fabDueDate + 'T00:00:00'))
         : null;
-      await this.tasksService.createTask({
+      const parentId = await this.tasksService.createTask({
         title,
         description: this.fabDescription.trim(),
         assigneeId: this.fabAssignee,
+        createdBy: this.auth.currentUser()?.uid ?? null,
         estimatedHours: this.fabHours,
         status: this.fabStatus,
         priority: this.fabPriority,
         dueDate,
         focusThisWeek: this.fabFocus,
         focusHours: this.fabFocus ? this.fabHours : null,
+        recurrence: this.fabRecurrence ?? null,
       });
+      for (const sub of this.fabTemplateSubtasks) {
+        await this.tasksService.createTask({
+          title: sub.title,
+          parentId,
+          assigneeId: this.fabAssignee,
+          createdBy: this.auth.currentUser()?.uid ?? null,
+          estimatedHours: sub.estimatedHours || 0,
+          status: '未着手',
+        });
+      }
+      this.fabTemplateSubtasks = [];
       this.notificationService.show('タスク作成', `「${title}」を作成しました`);
       this.closeFabModal();
     } catch (e) {
       console.error('FABタスク作成エラー:', e);
       this.fabError = 'タスクの作成に失敗しました';
+    } finally {
+      this.fabSubmitting = false;
     }
   }
 

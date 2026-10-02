@@ -8,7 +8,7 @@ import { Member, Task } from '../../core/models/task.model';
 import { AuthService } from '../../core/services/auth.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { saveMemberOrder, sortMembersBySavedOrder } from '../../core/utils/member-order';
-import { getForecastWeekLabels } from '../../core/utils/week-utils';
+import { getForecastWeekLabels, getWeekMonday } from '../../core/utils/week-utils';
 
 interface MemberStat {
   member: Member;
@@ -128,16 +128,27 @@ export class DashboardComponent {
   memberStats = computed(() => {
     const uid = this.auth.currentUser()?.uid;
     this.memberOrderVersion();
+    const now = Date.now();
+    const fourWeeksAgo = now - 28 * 24 * 60 * 60 * 1000;
 
     const stats = this.tasksService.members().map((m) => {
       const myCompleted = this.completedTasks().filter((t) => t.assigneeId === m.uid);
       const totalEstimated = myCompleted.reduce((sum, t) => sum + (t.estimatedHours ?? 0), 0);
       const totalActual = myCompleted.reduce((sum, t) => sum + (t.actualHours ?? 0), 0);
       const diff = totalActual - totalEstimated;
-      const accuracy =
-        totalEstimated > 0 && totalActual > 0
-          ? Math.round((totalEstimated / totalActual) * 100)
-          : null;
+
+      let accuracyEstimated = 0;
+      let accuracyError = 0;
+      for (const t of myCompleted) {
+        if (t.estimatedHours <= 0 || t.actualHours === null || !Number.isFinite(t.actualHours)) continue;
+        const completedAt = t.statusUpdatedAt?.toDate?.()?.getTime() ?? 0;
+        if (completedAt < fourWeeksAgo || completedAt > now) continue;
+        accuracyEstimated += t.estimatedHours;
+        accuracyError += Math.abs(t.actualHours - t.estimatedHours);
+      }
+      const accuracy = accuracyEstimated > 0
+        ? Math.round(Math.max(0, 1 - accuracyError / accuracyEstimated) * 100)
+        : null;
 
       return {
         member: m,
@@ -162,13 +173,12 @@ export class DashboardComponent {
     );
   });
 
-  // 今週完了したタスク数
+  // 今週完了したタスク数（月曜始まりのカレンダー週）
   weeklyCompleted = computed(() => {
-    const now = Date.now();
-    const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+    const weekStart = getWeekMonday(new Date()).getTime();
     return this.completedTasks().filter((t) => {
       if (!t.statusUpdatedAt?.toDate) return false;
-      return t.statusUpdatedAt.toDate().getTime() > weekAgo;
+      return t.statusUpdatedAt.toDate().getTime() >= weekStart;
     }).length;
   });
 
@@ -188,6 +198,7 @@ export class DashboardComponent {
   archivedTasks = computed(() =>
     this.tasksService.tasks().filter((t) => t.status === 'アーカイブ済み'),
   );
+  archiveCollapsed = false;
   progressPct = computed(() =>
     this.totalTasks() > 0 ? Math.round((this.doneTasks() / this.totalTasks()) * 100) : 0,
   );
@@ -320,6 +331,10 @@ export class DashboardComponent {
   });
 
   async moveTaskDueDate(task: Task, date: Date): Promise<void> {
+    if (!this.canEditTask(task)) {
+      this.notificationService.show('権限エラー', '自分が担当または作成したタスクのみ変更できます');
+      return;
+    }
     const currentDueDate = task.dueDate?.toDate();
     if (
       currentDueDate &&
@@ -337,6 +352,14 @@ export class DashboardComponent {
       console.error('締切日の変更に失敗しました:', error);
       this.notificationService.show('エラー', 'タスクの締切変更に失敗しました');
     }
+  }
+
+  canEditTask(task: Task): boolean {
+    const uid = this.auth.currentUser()?.uid;
+    if (!uid) return false;
+    const member = this.tasksService.members().find((m) => m.uid === uid);
+    if (member?.role === 'manager') return true;
+    return task.assigneeId === uid || task.createdBy === uid;
   }
 
   async restoreTask(task: Task): Promise<void> {
@@ -365,5 +388,49 @@ export class DashboardComponent {
       console.error('タスク削除エラー:', e);
       this.notificationService.show('エラー', 'タスクの削除に失敗しました');
     }
+  }
+
+  exportArchivedCsv(): void {
+    const archived = this.archivedTasks();
+    const allTasks = this.tasksService.tasks();
+    const members = this.tasksService.members();
+    const memberMap = new Map(members.map((m) => [m.uid, m.name]));
+    const priorityMap: Record<string, string> = { high: '高', medium: '中', low: '低' };
+    const fmtDate = (ts: any) => ts?.toDate ? `${ts.toDate().getFullYear()}/${String(ts.toDate().getMonth() + 1).padStart(2, '0')}/${String(ts.toDate().getDate()).padStart(2, '0')}` : '';
+
+    const allExport: Task[] = [];
+    for (const root of archived.filter((t) => t.parentId === null)) {
+      allExport.push(root);
+      const children = allTasks.filter((t) => t.parentId === root.id).sort((a, b) => a.order - b.order);
+      allExport.push(...children);
+    }
+
+    const header = ['タスク名', 'ステータス', '担当者', '優先度', '見積もり(h)', '実績(h)', '締切日', '作成日', '親タスク'];
+    const rows = allExport.map((t) => {
+      const assignee = t.assigneeId ? (memberMap.get(t.assigneeId) ?? '') : '';
+      const priority = t.priority ? (priorityMap[t.priority] ?? '') : '';
+      const parentTitle = t.parentId ? (allTasks.find((p) => p.id === t.parentId)?.title ?? '') : '';
+      return [
+        t.parentId ? `  ${t.title}` : t.title,
+        t.status,
+        assignee,
+        priority,
+        String(t.estimatedHours ?? ''),
+        t.actualHours != null ? String(t.actualHours) : '',
+        fmtDate(t.dueDate),
+        fmtDate(t.createdAt),
+        parentTitle,
+      ];
+    });
+
+    const escape = (v: string) => v.includes(',') || v.includes('"') || v.includes('\n') ? `"${v.replace(/"/g, '""')}"` : v;
+    const csv = '﻿' + [header, ...rows].map((r) => r.map(escape).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `archived_tasks_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 }

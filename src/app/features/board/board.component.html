@@ -330,7 +330,7 @@
           class="focus-filter-chip"
           type="button"
           [class.active]="filterFocus()"
-          (click)="filterFocus.set(!filterFocus())"
+          (click)="toggleFilterFocus()"
         >
           ★ 今週やる
         </button>
@@ -359,7 +359,7 @@
             >
               <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
             </svg>
-            @if (filterAssignee() || filterPriority()) {
+            @if (filterAssignee() || filterPriority() || filterWeek() !== null) {
               <span class="filter-dot"></span>
             }
           </button>
@@ -390,6 +390,19 @@
                 <option value="high">🔴 高</option>
                 <option value="medium">🟡 中</option>
                 <option value="low">🟢 低</option>
+              </select>
+
+              <label class="filter-label" for="filter-week">実施予定週</label>
+              <select
+                id="filter-week"
+                [ngModel]="filterWeek()"
+                (ngModelChange)="setFilterWeek($event)"
+                class="filter-select"
+              >
+                <option [ngValue]="null">すべて</option>
+                @for (label of weekLabels; track $index) {
+                  <option [ngValue]="$index">{{ label }}</option>
+                }
               </select>
             </div>
           }
@@ -445,7 +458,19 @@
               <button
                 type="button"
                 aria-label="今週やるフィルターを解除"
-                (click)="filterFocus.set(false)"
+                (click)="toggleFilterFocus()"
+              >
+                ✕
+              </button>
+            </span>
+          }
+          @if (filterWeek() !== null && !filterFocus()) {
+            <span class="active-chip">
+              {{ weekLabels[filterWeek()!] }}
+              <button
+                type="button"
+                aria-label="週フィルターを解除"
+                (click)="setFilterWeek(null)"
               >
                 ✕
               </button>
@@ -455,6 +480,7 @@
             filterAssignee() ||
             filterPriority() ||
             filterFocus() ||
+            filterWeek() !== null ||
             searchQuery() ||
             sortBy() !== 'none'
           ) {
@@ -1364,7 +1390,7 @@
                         <option value="low">🟢 低</option>
                       </select>
                     </div>
-                    <div class="form-field">
+                    <div class="add-form-field">
                       <label>繰り返し</label>
                       <select [(ngModel)]="newRootRecurrence">
                         <option [ngValue]="null">なし</option>
