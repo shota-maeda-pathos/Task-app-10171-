@@ -250,7 +250,7 @@
         このメンバーをチームから削除します。<br />
         担当タスクは「未割り当て」になります。この操作は元に戻せません。
       </p>
-      <div class="modal-actions">
+      <div class="modal-actions delete-confirm-actions">
         <button (click)="cancelDelete()">キャンセル</button>
         <button class="danger" (click)="confirmDelete()">削除する</button>
       </div>
@@ -395,7 +395,7 @@
     <div class="modal" (click)="$event.stopPropagation()">
       <h3>「{{ deletingTemplate.title }}」を削除しますか？</h3>
       <p class="delete-warning">このテンプレートを削除します。この操作は元に戻せません。</p>
-      <div class="modal-actions">
+      <div class="modal-actions delete-confirm-actions">
         <button (click)="deletingTemplate = null">キャンセル</button>
         <button class="danger" (click)="confirmDeleteTemplate()">削除する</button>
       </div>

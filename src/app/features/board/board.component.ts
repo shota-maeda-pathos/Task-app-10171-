@@ -451,7 +451,9 @@ export class BoardComponent {
     for (const id of ids) {
       const task = this.tasksService.tasks().find((t) => t.id === id);
       if (!task || !this.canMoveTask(task)) continue;
+      const shouldCloseCommentPanel = this.isTaskInDeleteTree(this.selectedTask()?.id, id);
       await this.tasksService.deleteTask(id);
+      if (shouldCloseCommentPanel) this.closeCommentPanel();
       deleted++;
     }
     this.notificationService.show('一括削除', `${deleted}件のタスクを削除しました`);
@@ -1572,7 +1574,9 @@ export class BoardComponent {
     const task = this.deletingTask;
     if (!task) return;
     this.deletingTask = null;
+    const shouldCloseCommentPanel = this.isTaskInDeleteTree(this.selectedTask()?.id, task.id);
     await this.tasksService.deleteTask(task.id);
+    if (shouldCloseCommentPanel) this.closeCommentPanel();
     this.notificationService.show('削除完了', `「${task.title}」を削除しました`);
   }
 
@@ -1912,6 +1916,20 @@ export class BoardComponent {
     if (!this.selectedTask()) return;
     this.selectedTask.set(null);
     this.router.navigate([], { queryParams: { taskId: null }, queryParamsHandling: 'merge' });
+  }
+
+  private isTaskInDeleteTree(taskId: string | undefined, deletedTaskId: string): boolean {
+    if (!taskId) return false;
+    const tasksById = new Map(this.tasksService.tasks().map((task) => [task.id, task]));
+    const visited = new Set<string>();
+    let currentId: string | null = taskId;
+
+    while (currentId && !visited.has(currentId)) {
+      if (currentId === deletedTaskId) return true;
+      visited.add(currentId);
+      currentId = tasksById.get(currentId)?.parentId ?? null;
+    }
+    return false;
   }
 
   async onFocusToggle(task: Task, event: MouseEvent): Promise<void> {

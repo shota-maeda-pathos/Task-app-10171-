@@ -346,6 +346,30 @@
     }
 }
 
+.delete-confirm-actions {
+    button {
+        padding: 8px;
+        border-radius: 6px;
+        background: rgba(var(--ink-rgb), 0.04);
+        border: none;
+        transition: all 0.15s;
+
+        &:hover {
+            background: rgba(var(--ink-rgb), 0.08);
+        }
+
+        &.danger {
+            background: var(--danger);
+            color: #fff;
+            font-weight: 500;
+
+            &:hover {
+                opacity: 0.9;
+            }
+        }
+    }
+}
+
 /* プロフィールカード */
 .profile-card {
     display: flex;

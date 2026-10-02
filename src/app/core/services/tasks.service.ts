@@ -138,13 +138,19 @@ export class TasksService {
       switchMap((currentUser) => {
         if (!currentUser) return of([]);
         return runInInjectionContext(this.injector, () =>
-          collectionData(
-            query(
-              this.templatesCollection,
-              where('createdBy', '==', currentUser.uid)
+          (
+            collectionData(
+              query(this.templatesCollection, where('createdBy', '==', currentUser.uid)),
+              { idField: 'id' }
+            ) as Observable<TaskTemplate[]>
+          ).pipe(
+            map((templates) =>
+              [...templates].sort(
+                (a, b) =>
+                  (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0),
+              ),
             ),
-            { idField: 'id' }
-          ) as Observable<TaskTemplate[]>,
+          ),
         );
       }),
     ) as Observable<TaskTemplate[]>,
