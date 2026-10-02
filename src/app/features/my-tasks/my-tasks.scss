@@ -809,8 +809,11 @@
 }
 
 .meta-chip {
+  display: inline-flex;
+  align-items: center;
   font-size: 0.7rem;
   font-weight: 500;
+  line-height: 1.6;
   padding: 2px 8px;
   border-radius: 4px;
   background: rgba(var(--ink-rgb), 0.04);

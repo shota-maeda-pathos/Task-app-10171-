@@ -419,6 +419,23 @@
     }
 }
 
+.profile-card .save-btn {
+    background: none;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    padding: 7px 14px;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 400;
+    transition: color 0.15s, border-color 0.15s;
+
+    &:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+        opacity: 1;
+    }
+}
+
 .profile-edit {
     margin-top: 16px;
     background: var(--card);
@@ -668,7 +685,7 @@
     }
 
     .inline-edit .save-btn {
-        padding: 8px 12px;
+        padding: 6px 9px;
         flex: 0 0 auto;
     }
 
