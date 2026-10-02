@@ -1,7 +1,8 @@
-import { Injectable, inject, Injector, runInInjectionContext } from '@angular/core';
+import { Injectable, inject, Injector, runInInjectionContext, computed } from '@angular/core';
 import { Auth, user } from '@angular/fire/auth';
+import { Storage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from '@angular/fire/storage';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { Observable, switchMap, of, map } from 'rxjs';
+import { Observable, switchMap, of, map, catchError } from 'rxjs';
 import { Firestore, collectionData } from '@angular/fire/firestore';
 import {
   collection,
@@ -27,7 +28,10 @@ import {
   TaskNotification,
   TaskActivity,
   TaskAttachment,
+  TaskTemplate,
+  RecurrenceType,
 } from '../models/task.model';
+import { getWeekIndex, getWeekMonday } from '../utils/week-utils';
 
 const VALID_STATUSES: Set<string> = new Set<string>([
   '未着手',
@@ -40,11 +44,17 @@ const VALID_STATUSES: Set<string> = new Set<string>([
 @Injectable({ providedIn: 'root' })
 export class TasksService {
   private firestore = inject(Firestore);
+  private storage = inject(Storage);
   private auth = inject(Auth);
   private injector = inject(Injector);
   private tasksCollection = collection(this.firestore, 'tasks');
   private membersCollection = collection(this.firestore, 'members');
+  private templatesCollection = collection(this.firestore, 'taskTemplates');
   private watchedTaskIds = new Set<string>();
+  private rootReorderQueue: Promise<void> = Promise.resolve();
+  private lastRootTaskOrder = 0;
+  private subtaskReorderQueues = new Map<string, Promise<void>>();
+  private lastSubtaskOrder = new Map<string, number>();
 
   tasks = toSignal(
     user(this.auth).pipe(
@@ -74,9 +84,51 @@ export class TasksService {
     { initialValue: [] as Member[] },
   );
 
+  private allTemplates = toSignal(
+    user(this.auth).pipe(
+      switchMap((currentUser) => {
+        if (!currentUser) return of([]);
+        return runInInjectionContext(this.injector, () =>
+          (collectionData(query(this.templatesCollection, orderBy('createdAt')), {
+            idField: 'id',
+          }) as Observable<TaskTemplate[]>).pipe(
+            catchError(() => of([] as TaskTemplate[])),
+          ),
+        );
+      }),
+    ) as Observable<TaskTemplate[]>,
+    { initialValue: [] as TaskTemplate[] },
+  );
+
+  templates = toSignal(
+    user(this.auth).pipe(
+      switchMap((currentUser) => {
+        if (!currentUser) return of([]);
+        return runInInjectionContext(this.injector, () =>
+          collectionData(
+            query(
+              this.templatesCollection,
+              where('createdBy', '==', currentUser.uid)
+            ),
+            { idField: 'id' }
+          ) as Observable<TaskTemplate[]>,
+        );
+      }),
+    ) as Observable<TaskTemplate[]>,
+    { initialValue: [] as TaskTemplate[] },
+  );
+
   // --- CRUD ---
 
+  private capFocusHours(focusHours: number, estimatedHours: number): number {
+    const maxHours = Number.isFinite(estimatedHours) ? Math.max(0, estimatedHours) : 0;
+    const requestedHours = Number.isFinite(focusHours) ? Math.max(0, focusHours) : 0;
+    return Math.min(requestedHours, maxHours);
+  }
+
   async createTask(data: Partial<Task>): Promise<string> {
+    const estimatedHours = data.estimatedHours ?? 0;
+    const focusThisWeek = data.focusThisWeek ?? false;
     const docRef = await addDoc(this.tasksCollection, {
       title: data.title ?? '',
       description: data.description ?? '',
@@ -84,7 +136,7 @@ export class TasksService {
       assigneeId: data.assigneeId ?? null,
       createdBy: data.createdBy ?? null,
       status: data.status ?? '未着手',
-      estimatedHours: data.estimatedHours ?? 0,
+      estimatedHours,
       actualHours: null,
       dueDate: data.dueDate ?? null,
       blockedBy: data.blockedBy ?? [],
@@ -94,6 +146,13 @@ export class TasksService {
       reviewReason: null,
       proposedDueDate: null,
       priority: data.priority ?? null,
+      focusThisWeek,
+      focusHours: focusThisWeek
+        ? this.capFocusHours(data.focusHours ?? estimatedHours, estimatedHours)
+        : null,
+      targetWeekStart: data.targetWeekStart ?? null,
+      recurrence: data.recurrence ?? null,
+      recurrenceSourceId: data.recurrenceSourceId ?? null,
     });
 
     this.addActivity(docRef.id, 'created').catch(() => {});
@@ -173,7 +232,21 @@ export class TasksService {
   async updateTask(taskId: string, data: Partial<Task>): Promise<void> {
     const task = this.tasks().find((t) => t.id === taskId);
     const ref = doc(this.firestore, 'tasks', taskId);
-    await updateDoc(ref, data);
+    const updateData: Partial<Task> = { ...data };
+    const focusThisWeek = data.focusThisWeek ?? task?.focusThisWeek ?? false;
+    const estimatedHours = data.estimatedHours ?? task?.estimatedHours ?? 0;
+
+    if (
+      focusThisWeek &&
+      (data.estimatedHours !== undefined ||
+        data.focusHours !== undefined ||
+        data.focusThisWeek === true)
+    ) {
+      const focusHours = data.focusHours ?? task?.focusHours ?? estimatedHours;
+      updateData.focusHours = this.capFocusHours(focusHours, estimatedHours);
+    }
+
+    await updateDoc(ref, updateData);
 
     if (data.assigneeId !== undefined && task && data.assigneeId !== task.assigneeId) {
       const oldName = this.members().find((m) => m.uid === task.assigneeId)?.name ?? '未割当';
@@ -186,6 +259,19 @@ export class TasksService {
       const oldLabel = labels[task.priority ?? ''] ?? '未設定';
       const newLabel = labels[data.priority ?? ''] ?? '未設定';
       this.addActivity(taskId, 'priority_change', oldLabel, newLabel).catch(() => {});
+    }
+
+    if (data.dueDate !== undefined && task) {
+      const oldTimestamp = task.dueDate?.toDate().getTime() ?? null;
+      const newTimestamp = data.dueDate?.toDate().getTime() ?? null;
+      if (oldTimestamp !== newTimestamp) {
+        this.addActivity(
+          taskId,
+          'due_date_change',
+          this.formatActivityDueDate(task.dueDate),
+          this.formatActivityDueDate(data.dueDate),
+        ).catch(() => {});
+      }
     }
 
     // 見積もり時間が変わった場合、親タスクも同期する
@@ -203,6 +289,68 @@ export class TasksService {
         batch.update(doc(this.firestore, 'tasks', id), { order });
       });
       await batch.commit();
+    }
+  }
+
+  async reorderRootTasks(orderedTaskIds: string[]): Promise<void> {
+    const pending = this.rootReorderQueue.catch(() => {}).then(async () => {
+      const rootTasks = this.tasks().filter((task) => task.parentId === null);
+      const rootTaskIds = new Set(rootTasks.map((task) => task.id));
+      if (
+        new Set(orderedTaskIds).size !== orderedTaskIds.length ||
+        orderedTaskIds.some((id) => !rootTaskIds.has(id))
+      ) {
+        throw new Error('タスクの並び順が更新中に変更されました');
+      }
+
+      const firstOrder =
+        Math.max(
+          Date.now(),
+          this.lastRootTaskOrder,
+          ...rootTasks.map((task) => task.order),
+        ) + 1;
+      this.lastRootTaskOrder = firstOrder + orderedTaskIds.length - 1;
+      await this.updateTaskOrders(
+        orderedTaskIds.map((id, index) => ({ id, order: firstOrder + index })),
+      );
+    });
+
+    this.rootReorderQueue = pending;
+    await pending;
+  }
+
+  async reorderSubtasks(parentId: string, orderedTaskIds: string[]): Promise<void> {
+    const previous = this.subtaskReorderQueues.get(parentId) ?? Promise.resolve();
+    const pending = previous.catch(() => {}).then(async () => {
+      const siblings = this.tasks().filter((task) => task.parentId === parentId);
+      const siblingIds = new Set(siblings.map((task) => task.id));
+      if (
+        orderedTaskIds.length !== siblings.length ||
+        new Set(orderedTaskIds).size !== siblings.length ||
+        orderedTaskIds.some((id) => !siblingIds.has(id))
+      ) {
+        throw new Error('サブタスクの並び順が更新中に変更されました');
+      }
+
+      const firstOrder =
+        Math.max(
+          Date.now(),
+          this.lastSubtaskOrder.get(parentId) ?? 0,
+          ...siblings.map((task) => task.order),
+        ) + 1;
+      this.lastSubtaskOrder.set(parentId, firstOrder + orderedTaskIds.length - 1);
+      await this.updateTaskOrders(
+        orderedTaskIds.map((id, index) => ({ id, order: firstOrder + index })),
+      );
+    });
+
+    this.subtaskReorderQueues.set(parentId, pending);
+    try {
+      await pending;
+    } finally {
+      if (this.subtaskReorderQueues.get(parentId) === pending) {
+        this.subtaskReorderQueues.delete(parentId);
+      }
     }
   }
 
@@ -385,16 +533,27 @@ export class TasksService {
 
   async approveReview(taskId: string): Promise<void> {
     const task = this.tasks().find((t) => t.id === taskId);
+    const nextDueDate = task?.proposedDueDate ?? task?.dueDate ?? null;
     const ref = doc(this.firestore, 'tasks', taskId);
     await updateDoc(ref, {
       status: '未着手',
-      dueDate: task?.proposedDueDate ?? task?.dueDate ?? null,
+      dueDate: nextDueDate,
       reviewReason: null,
       proposedDueDate: null,
       statusUpdatedAt: serverTimestamp(),
     });
 
     this.addActivity(taskId, 'review_approve', '差し戻し中', '未着手').catch(() => {});
+    const oldDueDate = task?.dueDate?.toDate().getTime() ?? null;
+    const approvedDueDate = nextDueDate?.toDate().getTime() ?? null;
+    if (task && oldDueDate !== approvedDueDate) {
+      this.addActivity(
+        taskId,
+        'due_date_change',
+        this.formatActivityDueDate(task.dueDate),
+        this.formatActivityDueDate(nextDueDate),
+      ).catch(() => {});
+    }
 
     const currentUserUid = this.auth.currentUser?.uid;
     const actor = this.members().find((m) => m.uid === currentUserUid);
@@ -457,6 +616,40 @@ export class TasksService {
     Promise.all(notificationPromises).catch((err) => console.error('通知作成エラー:', err));
   }
 
+  async withdrawReview(taskId: string): Promise<void> {
+    const task = this.tasks().find((t) => t.id === taskId);
+    const ref = doc(this.firestore, 'tasks', taskId);
+    await updateDoc(ref, {
+      status: '進行中',
+      reviewReason: null,
+      proposedDueDate: null,
+      statusUpdatedAt: serverTimestamp(),
+    });
+
+    this.addActivity(taskId, 'review_withdraw', '差し戻し中', '進行中').catch(() => {});
+
+    const currentUserUid = this.auth.currentUser?.uid;
+    const actor = this.members().find((m) => m.uid === currentUserUid);
+    const authorName = actor?.name ?? 'システム';
+
+    const managerUids = this.members()
+      .filter((m) => m.role === 'manager' && m.uid !== currentUserUid)
+      .map((m) => m.uid);
+
+    const notificationPromises = managerUids.map((uid) =>
+      this.addNotification(uid, {
+        taskId,
+        taskTitle: task?.title ?? '名称未設定タスク',
+        authorName,
+        text: '差し戻し申請が取り消されました。',
+        read: false,
+        createdAt: null as any,
+        type: 'review_withdrawn',
+      }),
+    );
+    Promise.all(notificationPromises).catch((err) => console.error('通知作成エラー:', err));
+  }
+
   // --- 派生ロジック ---
 
   getLoadPercent(memberId: string): number {
@@ -505,7 +698,6 @@ export class TasksService {
       const children = tasks.filter((c) => c.parentId === t.id);
 
       if (children.length > 0) {
-        // 親タスクの場合: 子タスクに割り当てられていない残り時間だけを負荷として計上
         const assignedChildHours = children
           .filter(
             (c) => c.status !== '完了' && c.status !== 'アーカイブ済み' && c.assigneeId !== null,
@@ -514,12 +706,171 @@ export class TasksService {
         const remaining = Math.max(0, (t.estimatedHours ?? 0) - assignedChildHours);
         totalHours += remaining;
       } else {
-        // 通常タスク・子タスクはそのまま計上
         totalHours += t.estimatedHours ?? 0;
       }
     }
 
     return totalHours;
+  }
+
+  getMemberFocusHours(memberId: string): number {
+    const tasks = this.tasks();
+    let totalHours = 0;
+
+    for (const t of tasks) {
+      if (t.status === '完了' || t.status === 'アーカイブ済み') continue;
+      if (t.assigneeId !== memberId) continue;
+      if (!t.focusThisWeek) continue;
+
+      const children = tasks.filter((c) => c.parentId === t.id);
+
+      if (children.length > 0) {
+        const focusedChildHours = children
+          .filter(
+            (c) =>
+              c.status !== '完了' &&
+              c.status !== 'アーカイブ済み' &&
+              c.assigneeId !== null &&
+              c.focusThisWeek,
+          )
+          .reduce((sum, c) => sum + (c.focusHours ?? c.estimatedHours ?? 0), 0);
+        const parentFocusHours = t.focusHours ?? t.estimatedHours ?? 0;
+        const remaining = Math.max(0, parentFocusHours - focusedChildHours);
+        totalHours += remaining;
+      } else {
+        totalHours += t.focusHours ?? t.estimatedHours ?? 0;
+      }
+    }
+
+    return totalHours;
+  }
+
+  getFocusLoadPercent(memberId: string): number {
+    const member = this.members().find((m) => m.uid === memberId);
+    if (!member) return 0;
+    const focusHours = this.getMemberFocusHours(memberId);
+    if (!member.weeklyCapacityHours || member.weeklyCapacityHours <= 0) return 0;
+    return Math.round((focusHours / member.weeklyCapacityHours) * 100);
+  }
+
+  getMemberFocusTaskCount(memberId: string): number {
+    return this.tasks().filter(
+      (t) =>
+        t.assigneeId === memberId &&
+        t.status !== '完了' &&
+        t.status !== 'アーカイブ済み' &&
+        t.focusThisWeek,
+    ).length;
+  }
+
+  async toggleFocus(taskId: string, focusThisWeek: boolean, focusHours?: number): Promise<void> {
+    const ref = doc(this.firestore, 'tasks', taskId);
+    const task = this.tasks().find((t) => t.id === taskId);
+    if (focusThisWeek) {
+      const estimatedHours = task?.estimatedHours ?? 0;
+      await updateDoc(ref, {
+        focusThisWeek: true,
+        focusHours: this.capFocusHours(
+          focusHours ?? task?.focusHours ?? estimatedHours,
+          estimatedHours,
+        ),
+        targetWeekStart: Timestamp.fromDate(getWeekMonday(new Date())),
+      });
+    } else {
+      const targetWeek = task?.targetWeekStart?.toDate();
+      const currentWeek = getWeekMonday(new Date());
+      const clearTargetWeek =
+        targetWeek && getWeekMonday(targetWeek).getTime() === currentWeek.getTime();
+      await updateDoc(ref, {
+        focusThisWeek: false,
+        focusHours: null,
+        ...(clearTargetWeek ? { targetWeekStart: null } : {}),
+      });
+    }
+  }
+
+  getMemberWeeklyHours(memberId: string): number[] {
+    const tasks = this.tasks();
+    const weekly = [0, 0, 0, 0];
+
+    for (const t of tasks) {
+      if (t.status === '完了' || t.status === 'アーカイブ済み') continue;
+      if (t.assigneeId !== memberId) continue;
+
+      let hours: number;
+      let weekIdx: number | null;
+
+      if (t.focusThisWeek) {
+        weekIdx = 0;
+        hours = t.focusHours ?? t.estimatedHours ?? 0;
+      } else if (t.targetWeekStart) {
+        const target = t.targetWeekStart instanceof Timestamp ? t.targetWeekStart.toDate() : new Date(t.targetWeekStart);
+        weekIdx = getWeekIndex(target);
+        hours = t.estimatedHours ?? 0;
+      } else if (t.dueDate) {
+        const due = t.dueDate instanceof Timestamp ? t.dueDate.toDate() : new Date(t.dueDate);
+        weekIdx = getWeekIndex(due);
+        hours = t.estimatedHours ?? 0;
+      } else {
+        continue;
+      }
+
+      if (weekIdx === null) continue;
+
+      const children = tasks.filter((c) => c.parentId === t.id);
+      if (children.length > 0) {
+        const assignedChildHours = children
+          .filter(
+            (c) =>
+              c.status !== '完了' &&
+              c.status !== 'アーカイブ済み' &&
+              c.assigneeId !== null,
+          )
+          .reduce((sum, c) => sum + (c.estimatedHours ?? 0), 0);
+        const remaining = Math.max(0, hours - assignedChildHours);
+        weekly[weekIdx] += remaining;
+      } else {
+        weekly[weekIdx] += hours;
+      }
+    }
+
+    return weekly;
+  }
+
+  getMemberWeeklyTaskCounts(memberId: string): number[] {
+    const tasks = this.tasks();
+    const counts = [0, 0, 0, 0];
+
+    for (const t of tasks) {
+      if (t.status === '完了' || t.status === 'アーカイブ済み') continue;
+      if (t.assigneeId !== memberId) continue;
+      if (t.parentId) continue;
+
+      let weekIdx: number | null;
+
+      if (t.focusThisWeek) {
+        weekIdx = 0;
+      } else if (t.targetWeekStart) {
+        const target = t.targetWeekStart instanceof Timestamp ? t.targetWeekStart.toDate() : new Date(t.targetWeekStart);
+        weekIdx = getWeekIndex(target);
+      } else if (t.dueDate) {
+        const due = t.dueDate instanceof Timestamp ? t.dueDate.toDate() : new Date(t.dueDate);
+        weekIdx = getWeekIndex(due);
+      } else {
+        continue;
+      }
+
+      if (weekIdx === null) continue;
+      counts[weekIdx]++;
+    }
+
+    return counts;
+  }
+
+  getWeeklyLoadPercent(memberId: string, weekHours: number): number {
+    const member = this.members().find((m) => m.uid === memberId);
+    if (!member || !member.weeklyCapacityHours || member.weeklyCapacityHours <= 0) return 0;
+    return Math.round((weekHours / member.weeklyCapacityHours) * 100);
   }
 
   getComments(taskId: string): Observable<TaskComment[]> {
@@ -674,6 +1025,12 @@ export class TasksService {
     });
   }
 
+  private formatActivityDueDate(dueDate: Timestamp | null | undefined): string {
+    if (!dueDate) return '未設定';
+    const date = dueDate.toDate();
+    return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+  }
+
   getActivities(taskId: string): Observable<TaskActivity[]> {
     return runInInjectionContext(this.injector, () => {
       const col = collection(this.firestore, 'tasks', taskId, 'activities');
@@ -696,18 +1053,25 @@ export class TasksService {
     fileName: string,
     fileType: string,
     fileSize: number,
-    dataUrl: string,
+    file: File,
   ): Promise<void> {
     const uid = this.auth.currentUser?.uid;
     if (!uid) return;
     const member = this.members().find((m) => m.uid === uid);
+    const timestamp = Date.now();
+    const safeName = fileName.replace(/[^a-zA-Z0-9._\-　-鿿豈-﫿]/g, '_');
+    const path = `task-attachments/${taskId}/${timestamp}_${safeName}`;
+    const fileRef = storageRef(this.storage, path);
+    await uploadBytes(fileRef, file);
+    const downloadUrl = await getDownloadURL(fileRef);
     const col = collection(this.firestore, 'tasks', taskId, 'attachments');
     await addDoc(col, {
       taskId,
       fileName,
       fileType,
       fileSize,
-      dataUrl,
+      dataUrl: downloadUrl,
+      storagePath: path,
       authorId: uid,
       authorName: member?.name ?? '不明',
       createdAt: serverTimestamp(),
@@ -715,7 +1079,60 @@ export class TasksService {
   }
 
   async deleteAttachment(taskId: string, attachmentId: string): Promise<void> {
-    const ref = doc(this.firestore, 'tasks', taskId, 'attachments', attachmentId);
+    const docRef = doc(this.firestore, 'tasks', taskId, 'attachments', attachmentId);
+    const snap = await getDoc(docRef);
+    const data = snap.data();
+    if (data?.['storagePath']) {
+      try {
+        const fileRef = storageRef(this.storage, data['storagePath']);
+        await deleteObject(fileRef);
+      } catch (e) {
+        console.warn('Storage削除エラー:', e);
+      }
+    }
+    await deleteDoc(docRef);
+  }
+
+  // --- テンプレート ---
+
+  async createTemplate(data: Omit<TaskTemplate, 'id' | 'createdAt'>): Promise<string> {
+    const docRef = await addDoc(this.templatesCollection, {
+      ...data,
+      createdAt: serverTimestamp(),
+    });
+    return docRef.id;
+  }
+
+  async updateTemplate(id: string, data: Partial<Omit<TaskTemplate, 'id' | 'createdAt'>>): Promise<void> {
+    const ref = doc(this.firestore, 'taskTemplates', id);
+    await updateDoc(ref, data);
+  }
+
+  async deleteTemplate(id: string): Promise<void> {
+    const ref = doc(this.firestore, 'taskTemplates', id);
     await deleteDoc(ref);
+  }
+
+  async createTaskFromTemplate(template: TaskTemplate, overrides: { assigneeId: string | null; status: TaskStatus; createdBy: string | null }): Promise<string> {
+    const taskId = await this.createTask({
+      title: template.title,
+      description: template.description,
+      priority: template.priority,
+      estimatedHours: template.estimatedHours,
+      ...overrides,
+    });
+
+    for (const sub of template.subtasks) {
+      await this.createTask({
+        title: sub.title,
+        estimatedHours: sub.estimatedHours,
+        parentId: taskId,
+        assigneeId: null,
+        createdBy: overrides.createdBy,
+        status: '未着手',
+      });
+    }
+
+    return taskId;
   }
 }

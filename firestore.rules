@@ -43,6 +43,18 @@ service cloud.firestore {
         allow delete: if isSignedIn()
           && request.auth.uid == resource.data.authorId;
       }
+
+      match /activities/{activityId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+      }
+    }
+
+    match /taskTemplates/{templateId} {
+      allow read: if isSignedIn() && resource.data.createdBy == request.auth.uid;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource.data.createdBy == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.createdBy == request.auth.uid;
     }
   }
 }

@@ -1,4 +1,4 @@
-import { afterRenderEffect, Component, ElementRef, inject, input, output, signal, viewChild } from '@angular/core';
+import { afterRenderEffect, Component, computed, ElementRef, inject, input, output, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
@@ -23,6 +23,7 @@ export class CommentPanelComponent {
   task = input<Task | null>(null);
   closed = output<void>();
   commentsList = viewChild<ElementRef<HTMLDivElement>>('commentsList');
+  historyList = viewChild<ElementRef<HTMLDivElement>>('historyList');
   private shouldFollowLatest = true;
   private lastTaskId: string | null = null;
 
@@ -30,6 +31,41 @@ export class CommentPanelComponent {
 
   newComment = '';
   isSubmitting = signal(false);
+
+  // メンション
+  mentionQuery = signal<string | null>(null);
+  mentionSuggestions = computed(() => {
+    const q = this.mentionQuery();
+    if (q === null) return [];
+    const members = this.tasksService.members();
+    if (!q) return members;
+    return members.filter((m) => m.name.toLowerCase().includes(q.toLowerCase()));
+  });
+
+  onCommentInput(event: Event): void {
+    const textarea = event.target as HTMLTextAreaElement;
+    this.newComment = textarea.value;
+    const cursorPos = textarea.selectionStart;
+    const textBefore = textarea.value.slice(0, cursorPos);
+    const atMatch = textBefore.match(/[@＠]([^\s@＠]*)$/);
+    if (atMatch) {
+      this.mentionQuery.set(atMatch[1]);
+    } else {
+      this.mentionQuery.set(null);
+    }
+  }
+
+  insertMention(member: { uid: string; name: string }): void {
+    const textarea = document.querySelector<HTMLTextAreaElement>('.comment-input');
+    if (!textarea) return;
+    const cursorPos = textarea.selectionStart;
+    const textBefore = textarea.value.slice(0, cursorPos);
+    const textAfter = textarea.value.slice(cursorPos);
+    const atIndex = Math.max(textBefore.lastIndexOf('@'), textBefore.lastIndexOf('＠'));
+    this.newComment = textBefore.slice(0, atIndex) + `@${member.name} ` + textAfter;
+    this.mentionQuery.set(null);
+    textarea.focus();
+  }
 
   comments = toSignal(
     toObservable(this.task).pipe(
@@ -87,6 +123,8 @@ export class CommentPanelComponent {
     }
     const list = this.commentsList()?.nativeElement;
     if (list && this.shouldFollowLatest) list.scrollTop = list.scrollHeight;
+    const hList = this.historyList()?.nativeElement;
+    if (hList) hList.scrollTop = hList.scrollHeight;
   });
 
   onCommentsScroll(): void {
@@ -114,6 +152,9 @@ export class CommentPanelComponent {
 
   toggleAttachments(): void {
     this.attachmentsExpanded.update((expanded) => !expanded);
+    if (!this.attachmentsExpanded()) {
+      this.attachError.set('');
+    }
   }
 
   activityLabel(act: TaskActivity): string {
@@ -126,6 +167,8 @@ export class CommentPanelComponent {
         return `担当者を「${act.oldValue}」→「${act.newValue}」に変更`;
       case 'priority_change':
         return `優先度を「${act.oldValue}」→「${act.newValue}」に変更`;
+      case 'due_date_change':
+        return `締め切りを「${act.oldValue}」→「${act.newValue}」に変更`;
       case 'created':
         return `タスクを作成しました`;
       case 'review_request':
@@ -185,6 +228,14 @@ export class CommentPanelComponent {
         targetUids.add(m.uid);
       }
     });
+
+    // メンションされたメンバーを追加（半角・全角@両対応）
+    const members = this.tasksService.members();
+    for (const m of members) {
+      if (submitted.includes(`@${m.name}`) || submitted.includes(`＠${m.name}`)) {
+        targetUids.add(m.uid);
+      }
+    }
 
     // コメントした本人は通知対象から外す
     targetUids.delete(user.uid);
@@ -256,7 +307,7 @@ export class CommentPanelComponent {
   }
 
   // ===== ファイル添付 =====
-  readonly MAX_FILE_SIZE = 500 * 1024; // 500KB
+  readonly MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
   openFilePicker(input: HTMLInputElement): void {
     if (this.attachUploading()) return;
@@ -273,7 +324,7 @@ export class CommentPanelComponent {
     }
   }
 
-  onFileSelect(event: Event): void {
+  async onFileSelect(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
@@ -285,41 +336,27 @@ export class CommentPanelComponent {
     }
 
     if (file.size > this.MAX_FILE_SIZE) {
-      this.attachError.set(`ファイルサイズが大きすぎます（上限500KB、選択: ${Math.round(file.size / 1024)}KB）`);
+      this.attachError.set(`ファイルサイズが大きすぎます（上限10MB、選択: ${(file.size / 1024 / 1024).toFixed(1)}MB）`);
       return;
     }
 
     this.attachError.set('');
     this.attachUploading.set(true);
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      if (typeof reader.result !== 'string') {
-        this.attachError.set('ファイルの読み込みに失敗しました');
-        this.attachUploading.set(false);
-        return;
-      }
-
-      try {
-        await this.tasksService.addAttachment(
-          task.id,
-          file.name,
-          file.type,
-          file.size,
-          reader.result,
-        );
-      } catch (err) {
-        console.error('添付エラー:', err);
-        this.attachError.set('ファイルの添付に失敗しました');
-      } finally {
-        this.attachUploading.set(false);
-      }
-    };
-    reader.onerror = () => {
-      this.attachError.set('ファイルの読み込みに失敗しました');
+    try {
+      await this.tasksService.addAttachment(
+        task.id,
+        file.name,
+        file.type,
+        file.size,
+        file,
+      );
+    } catch (err) {
+      console.error('添付エラー:', err);
+      this.attachError.set('ファイルの添付に失敗しました');
+    } finally {
       this.attachUploading.set(false);
-    };
-    reader.readAsDataURL(file);
+    }
   }
 
   async deleteAttachment(att: TaskAttachment): Promise<void> {

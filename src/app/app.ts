@@ -9,7 +9,7 @@ import { TasksService } from './core/services/tasks.service';
 import { NotificationService } from './core/services/notification.service';
 import { Router } from '@angular/router';
 import { Timestamp } from '@angular/fire/firestore';
-import { Priority, TaskStatus } from './core/models/task.model';
+import { Priority, TaskStatus, TaskTemplate } from './core/models/task.model';
 
 @Component({
   selector: 'app-root',
@@ -22,10 +22,41 @@ import { Priority, TaskStatus } from './core/models/task.model';
           <div class="header-left">
             <span class="app-logo">SyncHub +</span>
             <nav class="nav">
-              <a routerLink="/board" routerLinkActive="active">Home</a>
-              <a routerLink="/my-tasks" routerLinkActive="active">My Tasks</a>
-              <a routerLink="/dashboard" routerLinkActive="active">Dash Board</a>
-              <a routerLink="/settings" routerLinkActive="active">Setting</a>
+              <a routerLink="/board" routerLinkActive="active">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <rect x="3" y="3" width="7" height="7" />
+                  <rect x="14" y="3" width="7" height="7" />
+                  <rect x="14" y="14" width="7" height="7" />
+                  <rect x="3" y="14" width="7" height="7" />
+                </svg>
+                Home
+              </a>
+              <a routerLink="/my-tasks" routerLinkActive="active">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path
+                    d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"
+                  />
+                  <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+                </svg>
+                My Tasks
+              </a>
+              <a routerLink="/dashboard" routerLinkActive="active">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <line x1="18" y1="20" x2="18" y2="10" />
+                  <line x1="12" y1="20" x2="12" y2="4" />
+                  <line x1="6" y1="20" x2="6" y2="14" />
+                </svg>
+                Dashboard
+              </a>
+              <a routerLink="/settings" routerLinkActive="active">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="3" />
+                  <path
+                    d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+                  />
+                </svg>
+                Settings
+              </a>
             </nav>
           </div>
           <div class="header-right">
@@ -191,6 +222,16 @@ import { Priority, TaskStatus } from './core/models/task.model';
                 <button class="fab-modal-close" (click)="closeFabModal()">✕</button>
               </div>
               <div class="fab-modal-body">
+                @if (tasksService.templates().length > 0) {
+                  <div class="fab-template-row">
+                    <span class="fab-template-label">テンプレート:</span>
+                    @for (tpl of tasksService.templates(); track tpl.id) {
+                      <button class="fab-template-chip" (click)="applyFabTemplate(tpl)">
+                        {{ tpl.title }}
+                      </button>
+                    }
+                  </div>
+                }
                 <input
                   type="text"
                   [(ngModel)]="fabTitle"
@@ -211,7 +252,7 @@ import { Priority, TaskStatus } from './core/models/task.model';
                   <option [ngValue]="null">担当者を選ぶ（任意）</option>
                   @for (m of tasksService.members(); track m.uid) {
                     <option [ngValue]="m.uid">
-                      {{ m.name }}（{{ tasksService.getLoadPercent(m.uid) }}%）
+                      {{ m.name }}（{{ tasksService.getFocusLoadPercent(m.uid) }}%）
                     </option>
                   }
                 </select>
@@ -246,6 +287,10 @@ import { Priority, TaskStatus } from './core/models/task.model';
                     </select>
                   </div>
                 </div>
+                <label class="fab-focus-check">
+                  <input type="checkbox" [(ngModel)]="fabFocus" />
+                  今週やる
+                </label>
               </div>
               <div class="fab-modal-footer">
                 <button class="fab-cancel" (click)="closeFabModal()">キャンセル</button>
@@ -273,7 +318,7 @@ import { Priority, TaskStatus } from './core/models/task.model';
               <rect x="14" y="14" width="7" height="7" />
               <rect x="3" y="14" width="7" height="7" />
             </svg>
-            <span>ボード</span>
+            <span>Home</span>
           </a>
           <a routerLink="/my-tasks" routerLinkActive="active" class="bottom-nav-item">
             <svg
@@ -306,7 +351,7 @@ import { Priority, TaskStatus } from './core/models/task.model';
               <line x1="12" y1="20" x2="12" y2="4" />
               <line x1="6" y1="20" x2="6" y2="14" />
             </svg>
-            <span>ダッシュボード</span>
+            <span>Dashboard</span>
           </a>
           <a routerLink="/settings" routerLinkActive="active" class="bottom-nav-item">
             <svg
@@ -324,7 +369,7 @@ import { Priority, TaskStatus } from './core/models/task.model';
                 d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
               />
             </svg>
-            <span>設定</span>
+            <span>Settings</span>
           </a>
         </nav>
 
@@ -416,12 +461,25 @@ import { Priority, TaskStatus } from './core/models/task.model';
         gap: 4px;
       }
       .nav a {
+        display: flex;
+        align-items: center;
+        gap: 6px;
         color: rgba(255, 255, 255, 0.55);
         text-decoration: none;
         font-size: 13px;
         padding: 6px 12px;
         border-radius: 6px;
         transition: all 0.15s;
+      }
+      .nav a svg {
+        width: 15px;
+        height: 15px;
+        flex: 0 0 auto;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
       }
       .nav a:hover {
         color: #fff;
@@ -676,12 +734,14 @@ import { Priority, TaskStatus } from './core/models/task.model';
         top: calc(100% + 8px);
         right: 0;
         width: 320px;
+        max-height: calc(100dvh - 80px);
         background: var(--card);
         border-radius: 12px;
         border: 1px solid var(--line);
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
         z-index: 200;
-        overflow: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
       }
       .notif-header {
         display: flex;
@@ -921,6 +981,8 @@ import { Priority, TaskStatus } from './core/models/task.model';
         background: var(--card);
         color: var(--ink);
         transition: border-color 0.15s;
+        height: 40px;
+        box-sizing: border-box;
       }
       .fab-input:focus {
         outline: none;
@@ -963,6 +1025,8 @@ import { Priority, TaskStatus } from './core/models/task.model';
         border-radius: 8px;
         background: var(--card);
         transition: border-color 0.15s;
+        height: 40px;
+        box-sizing: border-box;
       }
       .fab-input-unit:focus-within {
         border-color: var(--accent);
@@ -972,9 +1036,10 @@ import { Priority, TaskStatus } from './core/models/task.model';
         min-width: 0;
         padding: 9px 12px;
         border: none;
+        border-radius: 8px 0 0 8px;
         font-size: 13px;
         font-family: inherit;
-        background: var(--card);
+        background: transparent;
         color: var(--ink);
       }
       .fab-input-unit input:focus {
@@ -990,6 +1055,48 @@ import { Priority, TaskStatus } from './core/models/task.model';
         font-size: 12px;
         color: var(--danger);
         margin: -4px 0;
+      }
+      .fab-template-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--line);
+      }
+      .fab-template-label {
+        font-size: 11px;
+        color: var(--muted);
+        flex-shrink: 0;
+      }
+      .fab-template-chip {
+        padding: 4px 10px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--card);
+        color: var(--ink);
+        font-size: 11px;
+        font-family: inherit;
+        cursor: pointer;
+        transition: all 0.15s;
+        white-space: nowrap;
+      }
+      .fab-template-chip:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: rgba(var(--accent-rgb), 0.06);
+      }
+      .fab-focus-check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--ink);
+        cursor: pointer;
+        margin-top: 4px;
+        input[type='checkbox'] {
+          accent-color: var(--accent);
+        }
       }
       .fab-modal-footer {
         display: flex;
@@ -1220,6 +1327,7 @@ export class App {
     this.googleLoginError = '';
     try {
       await this.auth.loginWithGoogle();
+      this.router.navigate(['/board']);
     } catch (e: any) {
       if (e?.code === 'auth/popup-closed-by-user') {
         this.googleLoginError = 'ログインがキャンセルされました';
@@ -1310,6 +1418,7 @@ export class App {
   fabDueDate = '';
   fabPriority: Priority | null = null;
   fabStatus: TaskStatus = '未着手';
+  fabFocus = false;
   fabError = '';
 
   openFabModal(): void {
@@ -1321,11 +1430,20 @@ export class App {
     this.fabDueDate = '';
     this.fabPriority = null;
     this.fabStatus = '未着手';
+    this.fabFocus = false;
     this.fabError = '';
   }
 
   closeFabModal(): void {
     this.showFabModal = false;
+  }
+
+  applyFabTemplate(tpl: TaskTemplate): void {
+    this.fabTitle = tpl.title;
+    this.fabDescription = tpl.description || '';
+    this.fabHours = tpl.estimatedHours || 1;
+    this.fabPriority = tpl.priority;
+    this.fabError = '';
   }
 
   async createTaskFromFab(): Promise<void> {
@@ -1346,6 +1464,8 @@ export class App {
         status: this.fabStatus,
         priority: this.fabPriority,
         dueDate,
+        focusThisWeek: this.fabFocus,
+        focusHours: this.fabFocus ? this.fabHours : null,
       });
       this.notificationService.show('タスク作成', `「${title}」を作成しました`);
       this.closeFabModal();

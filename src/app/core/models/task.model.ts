@@ -2,6 +2,7 @@ import { Timestamp } from '@angular/fire/firestore';
 
 export type TaskStatus = '未着手' | '進行中' | '差し戻し中' | '完了' | 'アーカイブ済み';
 export type Priority = 'high' | 'medium' | 'low';
+export type RecurrenceType = 'daily' | 'weekly' | 'biweekly' | 'monthly';
 
 export interface Task {
   id: string;
@@ -29,6 +30,13 @@ export interface Task {
   proposedDueDate?: Timestamp | null;
 
   priority: Priority | null;
+
+  focusThisWeek: boolean;
+  focusHours: number | null;
+  targetWeekStart: Timestamp | null;
+
+  recurrence: RecurrenceType | null;
+  recurrenceSourceId: string | null;
 }
 
 export interface Member {
@@ -65,11 +73,32 @@ export interface TaskAttachment {
 export interface TaskActivity {
   id: string;
   taskId: string;
-  type: 'status_change' | 'assignee_change' | 'priority_change' | 'completed' | 'created' | 'review_request' | 'review_approve' | 'review_reject';
+  type:
+    | 'status_change'
+    | 'assignee_change'
+    | 'priority_change'
+    | 'due_date_change'
+    | 'completed'
+    | 'created'
+    | 'review_request'
+    | 'review_approve'
+    | 'review_reject'
+    | 'review_withdraw';
   authorId: string;
   authorName: string;
   oldValue?: string | null;
   newValue?: string | null;
+  createdAt: Timestamp;
+}
+
+export interface TaskTemplate {
+  id: string;
+  title: string;
+  description: string;
+  priority: Priority | null;
+  estimatedHours: number;
+  subtasks: { title: string; estimatedHours: number }[];
+  createdBy: string;
   createdAt: Timestamp;
 }
 
@@ -81,5 +110,5 @@ export interface TaskNotification {
   text: string;
   read: boolean;
   createdAt: Timestamp;
-  type?: 'comment' | 'task_created' | 'returned' | 'review_approved' | 'review_rejected' | 'task_completed';
+  type?: 'comment' | 'task_created' | 'returned' | 'review_approved' | 'review_rejected' | 'review_withdrawn' | 'task_completed';
 }

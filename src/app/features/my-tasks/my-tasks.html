@@ -1,27 +1,111 @@
 <div class="my-tasks">
   <div class="my-tasks-header">
-    <h1>My Tasks</h1>
-    <p class="sub">自分の進捗と負荷を一覧で確認できます</p>
+    <h1>
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path
+          d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"
+        />
+        <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+      </svg>
+      My Tasks
+    </h1>
+    <p class="sub">自分の進捗とタスクを一覧で確認できます</p>
   </div>
 
-  <div class="my-tasks-stats">
-    <div class="stat">
-      <span class="stat-label">未完了</span>
-      <span class="stat-num">{{ activeTasks().length }}</span>
+  <div class="summary-grid">
+    <div class="summary-card summary-card-load">
+      <div class="summary-heading">
+        <span class="summary-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M3 12h4l3-8 4 16 3-8h4" />
+          </svg>
+        </span>
+        <span class="summary-label">今週の負荷</span>
+      </div>
+      <div class="summary-metric">
+        <span class="summary-value">
+          {{ focusLoadPct() }}<span class="summary-unit">%</span>
+        </span>
+      </div>
+      <div class="summary-progress-track" aria-hidden="true">
+        <div
+          class="summary-progress-fill"
+          [ngClass]="loadLevel(focusLoadPct())"
+          [style.width.%]="Math.min(focusLoadPct(), 100)"
+        ></div>
+      </div>
+      <span class="summary-sub">{{ focusHours() }}h / {{ weeklyCapacity() }}h</span>
     </div>
-    <div class="stat">
-      <span class="stat-label">今日が期限</span>
-      <span class="stat-num">{{ todayDueTasks().length }}</span>
+    <div class="summary-card summary-card-focus">
+      <div class="summary-heading">
+        <span class="summary-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z" />
+          </svg>
+        </span>
+        <span class="summary-label">フォーカスの残り</span>
+      </div>
+      <div class="summary-metric">
+        <span class="summary-value">{{ remainingFocusHours() }}<span class="summary-unit">h</span></span>
+      </div>
+      <span class="summary-sub">今週やる {{ focusTaskCount() }}件 / {{ weeklyCapacity() }}h</span>
     </div>
-    <div class="stat">
-      <span class="stat-label danger">期限切れ</span>
-      <span class="stat-num">{{ overdueTasks().length }}</span>
+    <div
+      class="summary-card summary-card-alert"
+      [class.has-alert]="actionableTaskSummary().total > 0"
+    >
+      <div class="summary-heading">
+        <span class="summary-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+            <path d="M10 21h4" />
+          </svg>
+        </span>
+        <span class="summary-label">要対応・アラート</span>
+      </div>
+      <div class="summary-metric">
+        <span class="summary-value">{{ actionableTaskSummary().total }}</span>
+        <span class="summary-unit">件</span>
+      </div>
+      <span class="summary-sub">
+        期限切れ{{ actionableTaskSummary().overdue }}件・今日{{ actionableTaskSummary().dueToday }}件
+      </span>
+    </div>
+    <div class="summary-card summary-card-achievement">
+      <div class="summary-heading">
+        <span class="summary-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="9" />
+            <path d="m8 12 2.5 2.5L16.5 9" />
+          </svg>
+        </span>
+        <span class="summary-label">今週の達成</span>
+      </div>
+      <div class="summary-metric">
+        <span class="summary-value">{{ weeklyCompletedTasks().length }}</span>
+        <span class="summary-unit">件完了</span>
+      </div>
+      <span class="summary-sub">
+        見積もり精度:
+        @if (estimateAccuracyPct() !== null) {
+          {{ estimateAccuracyPct() }}%
+        } @else {
+          —
+        }
+      </span>
     </div>
   </div>
 
   <div class="progress-wrap">
     <div class="progress-info">
-      <span class="progress-label">進捗</span>
+      <span class="progress-label">
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <line x1="18" y1="20" x2="18" y2="10" />
+          <line x1="12" y1="20" x2="12" y2="4" />
+          <line x1="6" y1="20" x2="6" y2="14" />
+        </svg>
+        進捗
+      </span>
       <span class="progress-pct">{{ progressPct() }}%</span>
     </div>
     <div class="progress-track">
@@ -29,6 +113,38 @@
     </div>
     <div class="progress-sub">
       {{ allCompletedTasks().length }} / {{ rootTasks().length }}件完了
+    </div>
+  </div>
+
+  <div class="forecast-section">
+    <div class="forecast-title">
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="17" rx="2" />
+        <line x1="16" y1="2" x2="16" y2="6" />
+        <line x1="8" y1="2" x2="8" y2="6" />
+        <line x1="3" y1="10" x2="21" y2="10" />
+        <polyline points="7 16 10 13 13 15 17 12" />
+      </svg>
+      今後4週間の負荷予測
+    </div>
+    <div class="forecast-bars">
+      @for (hours of forecastWeekly(); track $index) {
+        @let cap = weeklyCapacity();
+        @let pct = cap > 0 ? Math.round((hours / cap) * 100) : 0;
+        <div class="forecast-week">
+          <div class="forecast-label">{{ forecastLabels[$index] }}</div>
+          <div class="forecast-bar-track">
+            <div
+              class="forecast-bar-fill"
+              [class]="loadLevel(pct)"
+              [style.width.%]="pct > 100 ? 100 : pct"
+            ></div>
+          </div>
+          <div class="forecast-detail">
+            {{ hours }}h <span class="forecast-pct" [class]="loadLevel(pct)">({{ pct }}%)</span>
+          </div>
+        </div>
+      }
     </div>
   </div>
 
@@ -67,6 +183,15 @@
         完了済み ({{ myCompletedTasks().length }})
       </button>
     </div>
+
+    <label class="focus-filter-check" (click)="$event.stopPropagation()">
+      <input
+        type="checkbox"
+        [checked]="filterFocus()"
+        (change)="filterFocus.set($any($event.target).checked)"
+      />
+      今週やるのみ
+    </label>
 
     <div class="toolbar-right">
       @if (tab() === 'active') {
@@ -238,7 +363,20 @@
   <!-- 締切カレンダー -->
   <div class="calendar-section">
     <div class="calendar-header">
-      <h3 class="calendar-section-title">締切カレンダー</h3>
+      <h3 class="calendar-section-title">
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <rect x="3" y="4" width="18" height="17" rx="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+          <line x1="8" y1="14" x2="8" y2="14" />
+          <line x1="12" y1="14" x2="12" y2="14" />
+          <line x1="16" y1="14" x2="16" y2="14" />
+          <line x1="8" y1="18" x2="8" y2="18" />
+          <line x1="12" y1="18" x2="12" y2="18" />
+        </svg>
+        締切カレンダー
+      </h3>
       <div class="calendar-nav">
         <button type="button" (click)="monthOffset.set(monthOffset() - 1)">← 前へ</button>
         @if (monthOffset() !== 0) {
@@ -247,7 +385,7 @@
         <button type="button" (click)="monthOffset.set(monthOffset() + 1)">次へ →</button>
       </div>
     </div>
-    <div class="calendars">
+    <div class="calendars" cdkDropListGroup>
       @for (month of calendarMonths(); track month.label) {
         <div class="calendar">
           <div class="calendar-title">{{ month.label }}</div>
@@ -270,14 +408,20 @@
                   [class.has-tasks]="day.tasks.length > 0"
                   [class.sun]="day.date.getDay() === 0"
                   [class.sat]="day.date.getDay() === 6"
+                  cdkDropList
+                  [cdkDropListData]="day"
+                  [cdkDropListSortingDisabled]="true"
+                  (cdkDropListDropped)="moveTaskDueDate($event.item.data, day.date)"
                 >
                   <div class="cal-day">{{ day.day }}</div>
                   @for (task of day.tasks; track task.id) {
                     <div
                       class="cal-task"
+                      cdkDrag
+                      [cdkDragData]="task"
                       [style.background]="priorityColor(task.priority)"
-                      [title]="task.title"
-                      (click)="openCalTask(task)"
+                      [title]="task.title + '（ドラッグして締切を変更）'"
+                      (click)="openCalTask(task); $event.stopPropagation()"
                     >
                       {{ task.title.length > 6 ? task.title.slice(0, 6) + '…' : task.title }}
                     </div>
@@ -336,6 +480,41 @@
       }
       @if (getBlockedLabel(task); as label) {
         <span class="meta-chip blocked">{{ label }}</span>
+      }
+      @if (getTargetWeekLabel(task); as targetWeekLabel) {
+        <span class="meta-chip target-week">{{ targetWeekLabel }}</span>
+      } @else if (task.status !== '完了') {
+        <button
+          type="button"
+          class="meta-chip focus-chip"
+          [attr.aria-expanded]="pendingFocusTaskId() === task.id"
+          [class.focused]="task.focusThisWeek"
+          (click)="onFocusToggle(task, $event)"
+          [title]="task.focusThisWeek ? '今週のフォーカスを外す' : '今週やる'"
+        >
+          @if (task.focusThisWeek) {
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor">
+              <path
+                d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+              />
+            </svg>
+            今週 {{ task.focusHours ?? task.estimatedHours }}h
+          } @else {
+            <svg
+              viewBox="0 0 24 24"
+              width="11"
+              height="11"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+              />
+            </svg>
+            今週やる
+          }
+        </button>
       }
     </div>
 
@@ -402,9 +581,37 @@
               </svg>
             </button>
             @if (expandedSubtaskIds().has(task.id)) {
-              <div class="subtasks">
+              <div
+                class="subtasks"
+                cdkDropList
+                [cdkDropListData]="children"
+                (cdkDropListDropped)="reorderSubtasks($event, task.id)"
+              >
                 @for (child of children; track child.id) {
-                  <div class="subtask-row">
+                  <div
+                    class="subtask-row"
+                    cdkDrag
+                    cdkDragLockAxis="y"
+                    [cdkDragData]="child"
+                    [cdkDragDisabled]="!canReorderSubtask(child)"
+                  >
+                    @if (canReorderSubtask(child)) {
+                      <span
+                        class="subtask-drag-handle"
+                        cdkDragHandle
+                        aria-hidden="true"
+                        (click)="$event.stopPropagation()"
+                      >
+                        <svg viewBox="0 0 12 16" fill="currentColor">
+                          <circle cx="3" cy="3" r="1.4" />
+                          <circle cx="9" cy="3" r="1.4" />
+                          <circle cx="3" cy="8" r="1.4" />
+                          <circle cx="9" cy="8" r="1.4" />
+                          <circle cx="3" cy="13" r="1.4" />
+                          <circle cx="9" cy="13" r="1.4" />
+                        </svg>
+                      </span>
+                    }
                     <span
                       class="subtask-status"
                       [class.done]="child.status === '完了'"
@@ -428,10 +635,9 @@
                         </svg>
                       }
                     </span>
-                    <span
-                      class="subtask-title"
-                      [class.strike]="child.status === '完了'"
-                    >{{ child.title }}</span>
+                    <span class="subtask-title" [class.strike]="child.status === '完了'">{{
+                      child.title
+                    }}</span>
                     @if (child.estimatedHours) {
                       <span class="subtask-hours">{{ child.estimatedHours }}h</span>
                     }
@@ -447,13 +653,15 @@
                         [class.overdue]="ds === 'overdue'"
                         [class.today]="ds === 'today'"
                         [class.soon]="ds === 'soon'"
-                      >{{ formatDueDate(child.dueDate) }}</span>
+                        >{{ formatDueDate(child.dueDate) }}</span
+                      >
                     }
                     @if (child.assigneeId) {
                       <span
                         class="avatar small"
                         [style.background]="getMemberColor(child.assigneeId)"
-                      >{{ getMemberName(child.assigneeId).charAt(0) }}</span>
+                        >{{ getMemberName(child.assigneeId).charAt(0) }}</span
+                      >
                     }
                   </div>
                 }
@@ -489,7 +697,10 @@
                 <button class="review-action-btn" (click)="tasksService.rejectReview(task.id)">
                   却下(進行中に戻す)
                 </button>
-                <button class="review-action-btn confirm" (click)="tasksService.approveReview(task.id)">
+                <button
+                  class="review-action-btn confirm"
+                  (click)="tasksService.approveReview(task.id)"
+                >
                   承認(未着手に戻す)
                 </button>
               </div>
@@ -500,7 +711,12 @@
         }
 
         <!-- ステータス遷移ボタン（Board互換権限） -->
-        @if (canMoveTask(task) && task.status !== '完了' && task.status !== 'アーカイブ済み' && task.status !== '差し戻し中') {
+        @if (
+          canMoveTask(task) &&
+          task.status !== '完了' &&
+          task.status !== 'アーカイブ済み' &&
+          task.status !== '差し戻し中'
+        ) {
           <div class="move-buttons">
             @if (task.status === '進行中') {
               <button (click)="moveTask(task, '未着手')">← 戻す</button>
@@ -604,7 +820,8 @@
         <span
           class="preview-priority"
           [style.background]="priorityColor(selectedCalTask.priority)"
-        >{{ priorityLabel(selectedCalTask.priority ?? '') }}</span>
+          >{{ priorityLabel(selectedCalTask.priority ?? '') }}</span
+        >
         <button class="preview-close" (click)="closeCalTask()">✕</button>
       </div>
       <h3 class="preview-title">{{ selectedCalTask.title }}</h3>
@@ -616,8 +833,11 @@
           <span class="preview-label">担当</span>
           <span class="preview-val">
             @if (selectedCalTask.assigneeId) {
-              <span class="avatar" style="width:22px;height:22px;font-size:10px"
-                [style.background]="getMemberColor(selectedCalTask.assigneeId)">
+              <span
+                class="avatar"
+                style="width: 22px; height: 22px; font-size: 10px"
+                [style.background]="getMemberColor(selectedCalTask.assigneeId)"
+              >
                 {{ getMemberName(selectedCalTask.assigneeId).charAt(0) }}
               </span>
             }
@@ -637,9 +857,54 @@
           <span class="preview-val">{{ selectedCalTask.status }}</span>
         </div>
       </div>
-      <button class="preview-go-btn" (click)="goToTask(selectedCalTask.id)">
-        ボードで見る →
-      </button>
+      <button class="preview-go-btn" (click)="goToTask(selectedCalTask.id)">ボードで見る →</button>
     </div>
   </div>
 }
+
+<!-- A single top-layer popover shared by all cards, outside card layout/overflow. -->
+<form
+  #focusPopover
+  popover="auto"
+  class="focus-hours-popover"
+  [style.left.px]="focusPopoverLeft()"
+  [style.top.px]="focusPopoverTop()"
+  (toggle)="onFocusPopoverToggle($event)"
+  (click)="$event.stopPropagation()"
+  (submit)="saveFocusHoursFromPopover($event)"
+>
+  @if (pendingFocusTask(); as task) {
+    <label for="my-focus-hours">今週の予定時間</label>
+    <div class="focus-hours-field">
+      <input
+        id="my-focus-hours"
+        name="focusHours"
+        type="number"
+        min="0.1"
+        [max]="task.estimatedHours"
+        step="0.1"
+        required
+        [value]="focusHoursDraft() ?? ''"
+        (input)="onFocusHoursInput($event)"
+        [disabled]="focusSaving()"
+      />
+      <span>時間</span>
+    </div>
+    @if (focusSaveError()) {
+      <p role="alert">{{ focusSaveError() }}</p>
+    }
+    <div class="focus-hours-actions">
+      <button
+        type="button"
+        class="focus-hours-cancel"
+        (click)="closeFocusPopover()"
+        [disabled]="focusSaving()"
+      >
+        キャンセル
+      </button>
+      <button type="submit" class="focus-hours-save" [disabled]="focusSaving()">
+        {{ focusSaving() ? '保存中…' : '追加' }}
+      </button>
+    </div>
+  }
+</form>

@@ -8,6 +8,7 @@ import { Member, Task } from '../../core/models/task.model';
 import { AuthService } from '../../core/services/auth.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { saveMemberOrder, sortMembersBySavedOrder } from '../../core/utils/member-order';
+import { getForecastWeekLabels } from '../../core/utils/week-utils';
 
 interface MemberStat {
   member: Member;
@@ -17,6 +18,10 @@ interface MemberStat {
   diff: number;
   accuracy: number | null;
   loadPct: number;
+  focusHours: number;
+  focusTaskCount: number;
+  forecast: number[];
+  forecastCounts: number[];
 }
 
 interface CalendarDay {
@@ -39,6 +44,8 @@ export class DashboardComponent {
   notificationService = inject(NotificationService);
   private router = inject(Router);
   isMobile = signal(typeof window !== 'undefined' && window.innerWidth <= 768);
+  Math = Math;
+  forecastLabels = computed(() => getForecastWeekLabels());
 
   @HostListener('window:resize')
   onResize(): void {
@@ -47,6 +54,7 @@ export class DashboardComponent {
 
   // チーム負荷の折りたたみ
   showOtherMembers = signal(false);
+  showOtherForecast = signal(false);
   private memberOrderVersion = signal(0);
 
   toggleOtherMembers(): void {
@@ -91,9 +99,11 @@ export class DashboardComponent {
 
   // カレンダータスク詳細ポップアップ
   selectedCalTask: Task | null = null;
+  previewSubtasksOpen = false;
 
   openCalTask(task: Task): void {
     this.selectedCalTask = task;
+    this.previewSubtasksOpen = false;
   }
 
   closeCalTask(): void {
@@ -136,7 +146,11 @@ export class DashboardComponent {
         totalActual,
         diff,
         accuracy,
-        loadPct: this.tasksService.getLoadPercent(m.uid),
+        loadPct: this.tasksService.getFocusLoadPercent(m.uid),
+        focusHours: this.tasksService.getMemberFocusHours(m.uid),
+        focusTaskCount: this.tasksService.getMemberFocusTaskCount(m.uid),
+        forecast: this.tasksService.getMemberWeeklyHours(m.uid),
+        forecastCounts: this.tasksService.getMemberWeeklyTaskCounts(m.uid),
       };
     });
 
@@ -225,6 +239,10 @@ export class DashboardComponent {
       case 'low': return '低';
       default: return '—';
     }
+  }
+
+  getSubtasks(taskId: string): Task[] {
+    return this.tasksService.tasks().filter(t => t.parentId === taskId);
   }
 
   formatDueDate(task: Task): string {

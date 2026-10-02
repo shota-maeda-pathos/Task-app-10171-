@@ -401,6 +401,7 @@ $card: #ffffff;
     &.type-status_change { color: $active; }
     &.type-assignee_change { color: #c98a3a; }
     &.type-priority_change { color: #d64545; }
+    &.type-due_date_change { color: $active; }
     &.type-review_request { color: #c98a3a; }
     &.type-review_approve { color: #3fa37a; }
     &.type-review_reject { color: #d64545; }
@@ -682,26 +683,40 @@ $card: #ffffff;
     }
 }
 
+.mention-wrapper {
+    position: relative;
+}
+
 .mention-dropdown {
-    background: #ffffff;
-    border: 1px solid #e2e6ed;
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    background: $card;
+    border: 1px solid $line;
     border-radius: 8px;
     box-shadow: 0 4px 16px rgba(30, 36, 48, 0.12);
     max-height: 160px;
     overflow-y: auto;
     z-index: 1000;
+    margin-bottom: 4px;
+}
 
-    li {
-        padding: 8px 12px;
-        font-size: 13px;
-        cursor: pointer;
-        color: #1e2430;
+.mention-item {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    color: $ink;
+    background: none;
+    border: none;
+    text-align: left;
+    font-family: inherit;
 
-        &.active,
-        &:hover {
-            background: #f3f5f8;
-            color: #4c5fd5;
-            font-weight: 500;
-        }
+    &:hover {
+        background: $bg;
+        color: $active;
+        font-weight: 500;
     }
 }

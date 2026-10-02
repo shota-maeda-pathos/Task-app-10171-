@@ -18,7 +18,7 @@
     @if (sidebarCollapsed()) {
       <div class="sidebar-avatars">
         @if (sortedMembers()[0]; as member) {
-          @let pct = tasksService.getLoadPercent(member.uid);
+          @let pct = tasksService.getFocusLoadPercent(member.uid);
           @let level = loadLevel(pct);
           <div
             class="avatar-mini-wrap"
@@ -46,11 +46,12 @@
           (cdkDropListDropped)="reorderSidebar($event)"
         >
           @for (member of draggableSidebarMembers(); track member.uid) {
-            @let pct = tasksService.getLoadPercent(member.uid);
+            @let pct = tasksService.getFocusLoadPercent(member.uid);
             @let level = loadLevel(pct);
             <div
               class="avatar-mini-wrap"
               cdkDrag
+              cdkDragLockAxis="y"
               [cdkDragData]="member"
               [title]="
                 member.name +
@@ -75,11 +76,23 @@
 
     <!-- 展開時: 通常表示 -->
     @if (!sidebarCollapsed()) {
-      <h2>チームの負荷</h2>
-      <div class="sub">未完了タスクの見積もり合計/週稼働時間</div>
+      <h2>
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <line x1="18" y1="20" x2="18" y2="10" />
+          <line x1="12" y1="20" x2="12" y2="4" />
+          <line x1="6" y1="20" x2="6" y2="14" />
+        </svg>
+        今週の負荷
+      </h2>
+      <div class="sub">フォーカス中タスクの時間/週キャパシティ</div>
+      <div class="sidebar-legend">
+        <div class="legend-row"><span class="legend-dot ok"></span>80%未満</div>
+        <div class="legend-row"><span class="legend-dot warn"></span>80〜100%</div>
+        <div class="legend-row"><span class="legend-dot danger"></span>100%超</div>
+      </div>
 
       @if (sortedMembers()[0]; as member) {
-        @let pct = tasksService.getLoadPercent(member.uid);
+        @let pct = tasksService.getFocusLoadPercent(member.uid);
         @let level = loadLevel(pct);
         <div
           class="member is-me"
@@ -127,11 +140,36 @@
             <div class="bar-fill" [class]="level" [style.width.%]="pct > 100 ? 100 : pct"></div>
           </div>
           <div class="member-detail">
-            {{ getMemberTaskCount(member.uid) }}タスク | {{ getMemberTotalHours(member.uid) }}h /
+            {{ tasksService.getMemberFocusTaskCount(member.uid) }}件フォーカス |
+            {{ tasksService.getMemberFocusHours(member.uid) }}h /
             <button class="capacity-btn" (click)="openCapacityEdit(member)">
               {{ member.weeklyCapacityHours }}h
             </button>
           </div>
+          @if (filterAssignee() === member.uid) {
+            <div class="member-forecast">
+              @for (hours of tasksService.getMemberWeeklyHours(member.uid); track $index) {
+                @let cap = member.weeklyCapacityHours;
+                @let fpct = cap > 0 ? Math.round((hours / cap) * 100) : 0;
+                <div
+                  class="mini-bar"
+                  [title]="
+                    forecastLabels[$index] + ': ' + hours + 'h / ' + cap + 'h (' + fpct + '%)'
+                  "
+                >
+                  <div class="mini-bar-label">{{ forecastLabels[$index] }}</div>
+                  <div class="mini-bar-track">
+                    <div
+                      class="mini-bar-fill"
+                      [class]="loadLevel(fpct)"
+                      [style.width.%]="fpct > 100 ? 100 : fpct"
+                    ></div>
+                  </div>
+                  <div class="mini-bar-hours">{{ hours }}h</div>
+                </div>
+              }
+            </div>
+          }
         </div>
       }
       <div
@@ -141,11 +179,12 @@
         (cdkDropListDropped)="reorderSidebar($event)"
       >
         @for (member of draggableSidebarMembers(); track member.uid) {
-          @let pct = tasksService.getLoadPercent(member.uid);
+          @let pct = tasksService.getFocusLoadPercent(member.uid);
           @let level = loadLevel(pct);
           <div
             class="member"
             cdkDrag
+            cdkDragLockAxis="y"
             [cdkDragData]="member"
             [class.selected]="filterAssignee() === member.uid"
             (click)="filterByMember(member.uid)"
@@ -197,20 +236,40 @@
               <div class="bar-fill" [class]="level" [style.width.%]="pct > 100 ? 100 : pct"></div>
             </div>
             <div class="member-detail">
-              {{ getMemberTaskCount(member.uid) }}タスク | {{ getMemberTotalHours(member.uid) }}h /
+              {{ tasksService.getMemberFocusTaskCount(member.uid) }}件フォーカス |
+              {{ tasksService.getMemberFocusHours(member.uid) }}h /
               <button class="capacity-btn" (click)="openCapacityEdit(member)">
                 {{ member.weeklyCapacityHours }}h
               </button>
             </div>
+            @if (filterAssignee() === member.uid) {
+              <div class="member-forecast">
+                @for (hours of tasksService.getMemberWeeklyHours(member.uid); track $index) {
+                  @let cap = member.weeklyCapacityHours;
+                  @let fpct = cap > 0 ? Math.round((hours / cap) * 100) : 0;
+                  <div
+                    class="mini-bar"
+                    [title]="
+                      forecastLabels[$index] + ': ' + hours + 'h / ' + cap + 'h (' + fpct + '%)'
+                    "
+                  >
+                    <div class="mini-bar-label">{{ forecastLabels[$index] }}</div>
+                    <div class="mini-bar-track">
+                      <div
+                        class="mini-bar-fill"
+                        [class]="loadLevel(fpct)"
+                        [style.width.%]="fpct > 100 ? 100 : fpct"
+                      ></div>
+                    </div>
+                    <div class="mini-bar-hours">{{ hours }}h</div>
+                  </div>
+                }
+              </div>
+            }
           </div>
         }
       </div>
 
-      <div class="sidebar-legend">
-        <div class="legend-row"><span class="legend-dot ok"></span>80%未満</div>
-        <div class="legend-row"><span class="legend-dot warn"></span>80〜100%</div>
-        <div class="legend-row"><span class="legend-dot danger"></span>100%超</div>
-      </div>
     }
   </aside>
 
@@ -231,7 +290,7 @@
   }
 
   <div class="board-with-panel">
-    <main class="board-outer">
+    <main class="board-outer" (click)="closeCommentPanelOnEmptyBoard($event)">
       <div class="filter-bar" [class.is-expanded]="isFilterExpanded()">
         <div class="search-wrap">
           <svg
@@ -268,25 +327,16 @@
         </div>
 
         <button
-          class="mobile-filter-toggle"
+          class="focus-filter-chip"
           type="button"
-          (click)="isFilterExpanded.update((v) => !v)"
+          [class.active]="filterFocus()"
+          (click)="filterFocus.set(!filterFocus())"
         >
-          <svg
-            class="toggle-arrow"
-            [class.open]="isFilterExpanded()"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
+          ★ 今週やる
         </button>
 
         <div class="filter-menu">
+
           <button
             class="filter-icon-btn"
             type="button"
@@ -345,6 +395,25 @@
           }
         </div>
 
+        <button
+          class="mobile-filter-toggle"
+          type="button"
+          (click)="isFilterExpanded.update((v) => !v)"
+        >
+          <svg
+            class="toggle-arrow"
+            [class.open]="isFilterExpanded()"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+
         <div class="active-chips">
           @if (filterAssignee(); as assigneeId) {
             <span class="active-chip">
@@ -369,6 +438,29 @@
                 ✕
               </button>
             </span>
+          }
+          @if (filterFocus()) {
+            <span class="active-chip">
+              今週やる
+              <button
+                type="button"
+                aria-label="今週やるフィルターを解除"
+                (click)="filterFocus.set(false)"
+              >
+                ✕
+              </button>
+            </span>
+          }
+          @if (
+            filterAssignee() ||
+            filterPriority() ||
+            filterFocus() ||
+            searchQuery() ||
+            sortBy() !== 'none'
+          ) {
+            <button class="filter-clear" type="button" (click)="clearFilters()">
+              すべてクリア
+            </button>
           }
         </div>
 
@@ -533,13 +625,82 @@
             }
           </div>
 
-          @if (filterAssignee() || filterPriority() || searchQuery() || sortBy() !== 'none') {
-            <button class="filter-clear" type="button" (click)="clearFilters()">
-              すべてクリア
-            </button>
-          }
+          <!-- 一括操作トグル -->
+          <button class="view-toggle-btn" type="button" [class.active]="bulkMode()" (click)="toggleBulkMode()" title="一括操作">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="9 11 12 14 22 4" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>
+            <span>一括</span>
+          </button>
+
+          <!-- CSVエクスポート -->
+          <button class="view-toggle-btn" type="button" (click)="exportCsv()" title="CSVエクスポート">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            <span>CSV</span>
+          </button>
+
         </div>
-      </div>
+        </div>
+
+      @if (bulkMode()) {
+        <div class="bulk-action-bar">
+          <div class="bulk-top-row">
+            <span class="bulk-count">{{ bulkSelected().size }}件選択中</span>
+            <button type="button" (click)="bulkSelectAll()">すべて選択</button>
+            <button type="button" (click)="bulkDeselectAll()">選択解除</button>
+          </div>
+          <div class="bulk-fields-row">
+            <select [(ngModel)]="bulkStatus">
+              <option value="">ステータス</option>
+              <option value="未着手">未着手</option>
+              <option value="進行中">進行中</option>
+              <option value="完了">完了</option>
+            </select>
+            <select [(ngModel)]="bulkAssignee">
+              <option value="">担当者</option>
+              <option value="__none__">未割当</option>
+              @for (m of sortedMembers(); track m.uid) {
+                <option [value]="m.uid">{{ m.name }}</option>
+              }
+            </select>
+            <select [(ngModel)]="bulkPriority">
+              <option value="">優先度</option>
+              <option value="__none__">なし</option>
+              <option value="high">高</option>
+              <option value="medium">中</option>
+              <option value="low">低</option>
+            </select>
+            <input #bulkDateRef type="date" class="bulk-date-input" [(ngModel)]="bulkDueDateInput" (click)="bulkDateRef.showPicker()" placeholder="締切日" />
+            <select [(ngModel)]="bulkFocus">
+              <option value="">今週やる</option>
+              <option value="on">★ ON</option>
+              <option value="off">☆ OFF</option>
+            </select>
+          </div>
+          <div class="bulk-actions-row">
+            <button type="button" class="bulk-apply-btn" [disabled]="!bulkHasChanges() || bulkSelected().size === 0" (click)="bulkApply()">変更を適用</button>
+            <button type="button" class="bulk-delete-btn" [disabled]="bulkSelected().size === 0" (click)="bulkDeleting = true">削除</button>
+          </div>
+        </div>
+      }
+
+      @if (bulkDeleting) {
+        <div class="modal-overlay" (click)="bulkDeleting = false">
+          <div class="modal" (click)="$event.stopPropagation()">
+            <h3>{{ bulkSelected().size }}件のタスクを削除しますか？</h3>
+            <p class="modal-sub">選択したタスクとそのサブタスクをすべて削除します。この操作は元に戻せません。</p>
+            <div class="add-form-actions">
+              <button type="button" (click)="bulkDeleting = false">キャンセル</button>
+              <button type="button" class="confirm danger" (click)="bulkDelete()">削除する</button>
+            </div>
+          </div>
+        </div>
+      }
 
       <div
         class="board"
@@ -597,6 +758,12 @@
                   [class.empty-lane-cell]="
                     getSwimlaneTasks(lane.key, rootTasksByColumn()[status]).length === 0
                   "
+                  cdkDropList
+                  [id]="'swim-' + lane.key + '-' + status"
+                  [cdkDropListData]="getSwimlaneTasks(lane.key, rootTasksByColumn()[status])"
+                  [cdkDropListConnectedTo]="swimlaneConnectedLists()"
+                  [cdkDropListEnterPredicate]="canDropRootTask"
+                  (cdkDropListDropped)="onSwimlaneDrop($event, status)"
                 >
                   <div class="swimlane-cell-status">
                     <span class="col-dot" [class]="getStatusColor(status)"></span>
@@ -616,10 +783,23 @@
                       [class.stalled]="tasksService.isStalled(task)"
                       [class.selected]="selectedTask()?.id === task.id"
                       [class.compact-expanded]="expandedCompactTaskId() === task.id"
+                      [class.bulk-checked]="bulkSelected().has(task.id)"
+                      [class.bulk-active]="bulkMode()"
+                      cdkDrag
+                      [cdkDragData]="task"
+                      [cdkDragDisabled]="!canMoveTask(task)"
                       (click)="toggleCompactTaskDetails(task, $event)"
                     >
+                      @if (bulkMode()) {
+                        <input type="checkbox" class="bulk-checkbox" [checked]="bulkSelected().has(task.id)" (change)="toggleBulkSelect(task.id, $event)" (click)="$event.stopPropagation()" />
+                      }
                       @if (viewMode() === 'compact') {
                         <div class="compact-card-heading">
+                          @if (task.status === '差し戻し中') {
+                            <span class="compact-review-badge" title="{{ task.reviewReason }}"
+                              >差戻</span
+                            >
+                          }
                           <span class="compact-card-title">{{ task.title }}</span>
                           <span class="compact-card-assignee">
                             @if (task.assigneeId) {
@@ -634,32 +814,81 @@
                             }}</span>
                           </span>
                         </div>
-                      } @else {
-                        <div class="card-top">
-                          <span class="card-date">
-                            {{ formatDate(task.createdAt) }}
-                            @if (task.createdBy) {
-                              (作成者: {{ getMemberName(task.createdBy) }})
-                            }
-                          </span>
-                          <div style="display: flex; gap: 4px">
-                            <button class="comment-btn" (click)="openCommentPanel(task, $event)">
-                              コメント
-                            </button>
-                            <button class="edit-btn" (click)="openEditTask(task, $event)">
-                              編集
-                            </button>
+                        @if (task.status === '差し戻し中' && task.reviewReason) {
+                          <div class="compact-review-reason">
+                            {{ task.reviewReason }}
                             @if (canMoveTask(task)) {
-                              <button class="delete-btn" (click)="deleteTask(task)" title="削除">
+                              <button
+                                class="compact-review-dismiss"
+                                title="差し戻し取り消し"
+                                (click)="startWithdrawReview(task, $event)"
+                              >
                                 ×
                               </button>
                             }
                           </div>
-                        </div>
-                        <div class="card-title">{{ task.title }}</div>
-                        @if (task.description) {
-                          <div class="card-desc">{{ task.description }}</div>
                         }
+                      }
+                      <div class="card-top">
+                        <span class="card-date">
+                          {{ formatDate(task.createdAt) }}
+                          @if (task.createdBy) {
+                            <span class="card-creator"
+                              >(作成者: {{ getMemberName(task.createdBy) }})</span
+                            >
+                          }
+                        </span>
+                        <div class="card-actions" style="display: flex; gap: 4px">
+                          <button
+                            class="comment-btn"
+                            (click)="openCommentPanel(task, $event)"
+                            title="タイムライン"
+                          >
+                            <svg
+                              class="btn-icon"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
+                              <path
+                                d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+                              />
+                              <line x1="8" y1="9" x2="16" y2="9" />
+                              <line x1="8" y1="13" x2="13" y2="13" />
+                            </svg>
+                            <span>タイムライン</span>
+                          </button>
+                          <button
+                            class="edit-btn"
+                            (click)="openEditTask(task, $event)"
+                            title="編集"
+                          >
+                            <svg
+                              class="btn-icon"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
+                              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                            </svg>
+                            <span>編集</span>
+                          </button>
+                          @if (canMoveTask(task)) {
+                            <button class="delete-btn" (click)="deleteTask(task)" title="削除">
+                              ×
+                            </button>
+                          }
+                        </div>
+                      </div>
+                      <div class="card-title">{{ task.title }}</div>
+                      @if (task.description) {
+                        <div class="card-desc">{{ task.description }}</div>
                       }
                       <div class="card-meta">
                         @if (task.estimatedHours) {
@@ -692,8 +921,56 @@
                             priorityLabel(task.priority)
                           }}</span>
                         }
+
+                        @if (task.recurrence) {
+                          <span class="meta-chip recurrence-chip" title="繰り返し: {{ recurrenceLabel(task.recurrence) }}">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
+                              <polyline points="17 1 21 5 17 9"/>
+                              <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                              <polyline points="7 23 3 19 7 15"/>
+                              <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                            </svg>
+                            {{ recurrenceLabel(task.recurrence) }}
+                          </span>
+                        }
+
+                        @if (getTargetWeekLabel(task); as targetWeekLabel) {
+                          <span class="meta-chip target-week">{{ targetWeekLabel }}</span>
+                        } @else {
+                          <button
+                            type="button"
+                            class="meta-chip focus-chip"
+                            [attr.aria-expanded]="pendingFocusTaskId() === task.id"
+                            [class.focused]="task.focusThisWeek"
+                            (click)="onFocusToggle(task, $event)"
+                            [title]="task.focusThisWeek ? '今週のフォーカスを外す' : '今週やる'"
+                          >
+                            @if (task.focusThisWeek) {
+                              <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor">
+                                <path
+                                  d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+                                />
+                              </svg>
+                              今週 {{ task.focusHours ?? task.estimatedHours }}h
+                            } @else {
+                              <svg
+                                viewBox="0 0 24 24"
+                                width="11"
+                                height="11"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                              >
+                                <path
+                                  d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+                                />
+                              </svg>
+                              今週やる
+                            }
+                          </button>
+                        }
                       </div>
-                      @if (isEpic && viewMode() === 'detail') {
+                      @if (isEpic) {
                         @let progress = tasksService.getEpicProgress(task.id);
                         <div class="epic-info">
                           <div class="owner">
@@ -740,9 +1017,39 @@
                             </svg>
                           </button>
                           @if (expandedSubtaskIds().has(task.id)) {
-                            <div class="subtasks">
+                            <div
+                              class="subtasks"
+                              cdkDropList
+                              [cdkDropListData]="children"
+                              [cdkDropListEnterPredicate]="canDropSubtask"
+                              (cdkDropListDropped)="reorderSubtasks($event, task.id)"
+                            >
                               @for (child of children; track child.id) {
-                                <div class="subtask-row" [id]="'task-' + child.id">
+                                <div
+                                  class="subtask-row"
+                                  [id]="'task-' + child.id"
+                                  cdkDrag
+                                  cdkDragLockAxis="y"
+                                  [cdkDragData]="child"
+                                  [cdkDragDisabled]="!canReorderSubtask(child)"
+                                >
+                                  @if (canReorderSubtask(child)) {
+                                    <span
+                                      class="subtask-drag-handle"
+                                      cdkDragHandle
+                                      aria-hidden="true"
+                                      (click)="$event.stopPropagation()"
+                                    >
+                                      <svg viewBox="0 0 12 16" fill="currentColor">
+                                        <circle cx="3" cy="3" r="1.4" />
+                                        <circle cx="9" cy="3" r="1.4" />
+                                        <circle cx="3" cy="8" r="1.4" />
+                                        <circle cx="9" cy="8" r="1.4" />
+                                        <circle cx="3" cy="13" r="1.4" />
+                                        <circle cx="9" cy="13" r="1.4" />
+                                      </svg>
+                                    </span>
+                                  }
                                   <span
                                     class="subtask-status"
                                     [class.done]="getStatusColor(child.status) === 'done'"
@@ -783,9 +1090,13 @@
                           }
                         </div>
                       }
-                      @if (viewMode() === 'compact' && canMoveTask(task)) {
+                      @if (
+                        viewMode() === 'compact' &&
+                        canMoveTask(task) &&
+                        task.status !== '差し戻し中'
+                      ) {
                         <div class="move-buttons compact-swimlane-actions">
-                          @if (task.status === '進行中' || task.status === '差し戻し中') {
+                          @if (task.status === '進行中') {
                             <button
                               [disabled]="!canMoveTask(task)"
                               (click)="moveTask(task, '未着手'); $event.stopPropagation()"
@@ -827,9 +1138,9 @@
                             </button>
                           }
                         </div>
-                      } @else if (canMoveTask(task)) {
+                      } @else if (canMoveTask(task) && task.status !== '差し戻し中') {
                         <div class="move-buttons">
-                          @if (task.status === '進行中' || task.status === '差し戻し中') {
+                          @if (task.status === '進行中') {
                             <button (click)="moveTask(task, '未着手'); $event.stopPropagation()">
                               ← 戻す
                             </button>
@@ -866,6 +1177,64 @@
                           }
                         </div>
                       }
+
+                      @if (task.status === '差し戻し中') {
+                        <div class="review-box">
+                          @if (canMoveTask(task)) {
+                            <button
+                              class="review-dismiss-btn"
+                              title="差し戻し取り消し"
+                              (click)="startWithdrawReview(task, $event)"
+                            >
+                              ×
+                            </button>
+                          }
+                          <div class="review-reason">
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              width="14"
+                              height="14"
+                              style="vertical-align: -2px; flex-shrink: 0"
+                            >
+                              <path
+                                d="M21 12c0 4.97-4.03 9-9 9a8.94 8.94 0 0 1-4.24-1.06L3 21l1.06-4.76A8.94 8.94 0 0 1 3 12c0-4.97 4.03-9 9-9s9 4.03 9 9z"
+                              />
+                              <path d="M8 12h.01M12 12h.01M16 12h.01" />
+                            </svg>
+                            {{ task.reviewReason }}
+                          </div>
+                          @if (isManager()) {
+                            <div class="review-actions">
+                              <button (click)="startReviewAction(task, 'reject', $event)">
+                                却下<span class="review-btn-detail">(進行中に戻す)</span>
+                              </button>
+                              <button (click)="startReviewAction(task, 'approve', $event)">
+                                承認<span class="review-btn-detail">(未着手に戻す)</span>
+                              </button>
+                            </div>
+                          } @else {
+                            <div class="manager-only-note">上司の承認待ちです</div>
+                          }
+                        </div>
+                      }
+                      <ng-template cdkDragPreview [matchSize]="true">
+                        <div class="compact-task-preview">
+                          <span class="compact-task-preview-title">{{ task.title }}</span>
+                          <span class="compact-task-preview-meta">
+                            @if (task.estimatedHours) {
+                              <span>{{ task.estimatedHours }}h</span>
+                            }
+                            @if (task.priority) {
+                              <span>{{ priorityLabel(task.priority) }}</span>
+                            }
+                          </span>
+                        </div>
+                      </ng-template>
                     </div>
                   }
                 </div>
@@ -886,16 +1255,68 @@
                 <span class="col-count">{{ rootTasksByColumn()[status].length }}</span>
               </div>
 
-              <button class="add-trigger" (click)="toggleAddRoot(status)">+ タスクを追加</button>
+              <div class="add-trigger-row">
+                <button class="add-trigger" (click)="toggleAddRoot(status)">+ タスクを追加</button>
+                @if (tasksService.templates().length > 0) {
+                  <div class="template-trigger-wrap">
+                    <button class="template-trigger" (click)="toggleTemplatePicker(status)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="3" y1="9" x2="21" y2="9"/>
+                        <line x1="9" y1="21" x2="9" y2="9"/>
+                      </svg>
+                      テンプレから作成
+                    </button>
+                    @if (templatePickerColumn === status) {
+                      <div class="template-picker">
+                        @for (tpl of tasksService.templates(); track tpl.id) {
+                          <button class="template-pick-item" (click)="createFromTemplate(tpl, status)">
+                            <span class="template-pick-name">{{ tpl.title }}</span>
+                            @if (tpl.priority) {
+                              <span class="template-pick-priority priority-{{ tpl.priority }}">{{ tpl.priority === 'high' ? '高' : tpl.priority === 'medium' ? '中' : '低' }}</span>
+                            }
+                          </button>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
 
               @if (newRootColumn === status) {
                 <div
-                  class="add-form"
+                  class="add-form add-form-modal"
                   style="margin-bottom: 14px"
                   (mousedown)="$event.stopPropagation()"
                   (touchstart)="$event.stopPropagation()"
                   (click)="$event.stopPropagation()"
                 >
+                  @if (tasksService.templates().length > 0) {
+                    <div class="template-inline-wrap">
+                      <div class="template-inline-trigger">
+                        <button class="template-trigger" type="button" (click)="toggleTemplatePicker(status)">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="3" y1="9" x2="21" y2="9"/>
+                            <line x1="9" y1="21" x2="9" y2="9"/>
+                          </svg>
+                          テンプレから作成
+                        </button>
+                      </div>
+                      @if (templatePickerColumn === status) {
+                        <div class="template-picker">
+                          @for (tpl of tasksService.templates(); track tpl.id) {
+                            <button class="template-pick-item" type="button" (click)="createFromTemplate(tpl, status)">
+                              <span class="template-pick-name">{{ tpl.title }}</span>
+                              @if (tpl.priority) {
+                                <span class="template-pick-priority priority-{{ tpl.priority }}">{{ tpl.priority === 'high' ? '高' : tpl.priority === 'medium' ? '中' : '低' }}</span>
+                              }
+                            </button>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
                   <input
                     type="text"
                     [(ngModel)]="newRootTitle"
@@ -913,30 +1334,51 @@
                     rows="2"
                   ></textarea>
                   <select [(ngModel)]="newRootAssignee">
-                    <option [ngValue]="null">担当者を選ぶ(任意)</option>
+                    <option [ngValue]="null">担当者を選ぶ（任意）</option>
                     @for (m of sortedMembers(); track m.uid) {
                       <option [ngValue]="m.uid">
-                        {{ m.name }}({{ tasksService.getLoadPercent(m.uid) }}%)
+                        {{ m.name }}（{{ tasksService.getFocusLoadPercent(m.uid) }}%）
                       </option>
                     }
                   </select>
-                  <div class="input-with-unit">
-                    <input
-                      type="number"
-                      [(ngModel)]="newRootHours"
-                      min="0.5"
-                      step="0.5"
-                      placeholder="見積もり時間"
-                    />
-                    <span class="unit">h</span>
+                  <div class="add-form-row">
+                    <div class="add-form-field">
+                      <label>見積もり</label>
+                      <div class="input-with-unit">
+                        <input type="number" [(ngModel)]="newRootHours" min="0.5" step="0.5" />
+                        <span class="unit">h</span>
+                      </div>
+                    </div>
+                    <div class="add-form-field">
+                      <label>締切日</label>
+                      <input type="date" [(ngModel)]="newRootDueDate" />
+                    </div>
                   </div>
-                  <input type="date" [(ngModel)]="newRootDueDate" />
-                  <select [(ngModel)]="newRootPriority">
-                    <option [ngValue]="null">優先度を選ぶ(任意)</option>
-                    <option value="high">🔴 高</option>
-                    <option value="medium">🟡 中</option>
-                    <option value="low">🟢 低</option>
-                  </select>
+                  <div class="add-form-row">
+                    <div class="add-form-field">
+                      <label>優先度</label>
+                      <select [(ngModel)]="newRootPriority">
+                        <option [ngValue]="null">なし</option>
+                        <option value="high">🔴 高</option>
+                        <option value="medium">🟡 中</option>
+                        <option value="low">🟢 低</option>
+                      </select>
+                    </div>
+                    <div class="form-field">
+                      <label>繰り返し</label>
+                      <select [(ngModel)]="newRootRecurrence">
+                        <option [ngValue]="null">なし</option>
+                        <option value="daily">毎日</option>
+                        <option value="weekly">毎週</option>
+                        <option value="biweekly">隔週</option>
+                        <option value="monthly">毎月</option>
+                      </select>
+                    </div>
+                  </div>
+                  <label class="filter-checkbox focus-create-check">
+                    <input type="checkbox" [(ngModel)]="newRootFocus" />
+                    今週やる
+                  </label>
 
                   @if (newRootAssignee) {
                     @let pct = getLoadPct(newRootAssignee);
@@ -970,10 +1412,18 @@
                           <line x1="12" y1="17" x2="12.01" y2="17" />
                         </svg>
                         {{ getMemberName(newRootAssignee) }}さんはすでに{{ pct }}%の負荷です
-                        @if (suggestAlternative(newRootAssignee); as alt) {
-                          <br /><button class="suggest" (click)="newRootAssignee = alt.uid">
-                            代わりに{{ alt.name }}さん({{ alt.pct }}%)に振る
-                          </button>
+                        @if (getAlternativeCandidates(newRootAssignee).length > 0) {
+                          <div class="alt-select-row">
+                            <select
+                              class="alt-select"
+                              (change)="newRootAssignee = $any($event.target).value"
+                            >
+                              <option value="" disabled selected>代わりの担当者を選ぶ</option>
+                              @for (c of getAlternativeCandidates(newRootAssignee); track c.uid) {
+                                <option [value]="c.uid">{{ c.name }}（{{ c.pct }}%）</option>
+                              }
+                            </select>
+                          </div>
                         }
                       </div>
                     }
@@ -992,6 +1442,7 @@
                 [id]="'col-' + status"
                 [cdkDropListData]="rootTasksByColumn()[status]"
                 [cdkDropListConnectedTo]="connectedLists"
+                [cdkDropListEnterPredicate]="canDropRootTask"
                 (cdkDropListDropped)="onDrop($event, status)"
               >
                 @for (task of rootTasksByColumn()[status]; track task.id) {
@@ -1006,11 +1457,16 @@
                     [class.stalled]="tasksService.isStalled(task)"
                     [class.selected]="selectedTask()?.id === task.id"
                     [class.compact-expanded]="expandedCompactTaskId() === task.id"
+                    [class.bulk-checked]="bulkSelected().has(task.id)"
+                    [class.bulk-active]="bulkMode()"
                     cdkDrag
                     [cdkDragData]="task"
-                    [cdkDragDisabled]="!canMoveTask(task)"
+                    [cdkDragDisabled]="!canMoveTask(task) || expandedSubtaskIds().has(task.id)"
                     (click)="toggleCompactTaskDetails(task, $event)"
                   >
+                    @if (bulkMode()) {
+                      <input type="checkbox" class="bulk-checkbox" [checked]="bulkSelected().has(task.id)" (change)="toggleBulkSelect(task.id, $event)" (click)="$event.stopPropagation()" />
+                    }
                     <div class="card-top">
                       <span class="card-date">
                         {{ formatDate(task.createdAt) }}
@@ -1024,7 +1480,7 @@
                         <button
                           class="comment-btn"
                           (click)="openCommentPanel(task, $event)"
-                          title="コメント"
+                          title="タイムライン"
                         >
                           <svg
                             class="btn-icon"
@@ -1041,9 +1497,22 @@
                             <line x1="8" y1="9" x2="16" y2="9" />
                             <line x1="8" y1="13" x2="13" y2="13" />
                           </svg>
-                          <span>コメント</span>
+                          <span>タイムライン</span>
                         </button>
-                        <button class="edit-btn" (click)="openEditTask(task, $event)">編集</button>
+                        <button class="edit-btn" (click)="openEditTask(task, $event)" title="編集">
+                          <svg
+                            class="btn-icon"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                          </svg>
+                          <span>編集</span>
+                        </button>
                         @if (canMoveTask(task)) {
                           <button class="delete-btn" (click)="deleteTask(task)" title="削除">
                             ×
@@ -1054,6 +1523,11 @@
 
                     @if (viewMode() === 'compact') {
                       <div class="compact-card-heading">
+                        @if (task.status === '差し戻し中') {
+                          <span class="compact-review-badge" title="{{ task.reviewReason }}"
+                            >差戻</span
+                          >
+                        }
                         <span class="compact-card-title">{{ task.title }}</span>
                         <span class="compact-card-assignee">
                           @if (task.assigneeId) {
@@ -1068,6 +1542,20 @@
                           }}</span>
                         </span>
                       </div>
+                      @if (task.status === '差し戻し中' && task.reviewReason) {
+                        <div class="compact-review-reason">
+                          {{ task.reviewReason }}
+                          @if (canMoveTask(task)) {
+                            <button
+                              class="compact-review-dismiss"
+                              title="差し戻し取り消し"
+                              (click)="startWithdrawReview(task, $event)"
+                            >
+                              ×
+                            </button>
+                          }
+                        </div>
+                      }
                     }
 
                     <div
@@ -1085,7 +1573,6 @@
                     @if (task.description) {
                       <div class="card-desc">{{ task.description }}</div>
                     }
-
                     <div class="card-meta">
                       @if (task.estimatedHours) {
                         <span class="meta-chip time">{{ task.estimatedHours }}h</span>
@@ -1207,6 +1694,52 @@
                           priorityLabel(task.priority)
                         }}</span>
                       }
+                      @if (task.recurrence) {
+                        <span class="meta-chip recurrence-chip" title="繰り返し: {{ recurrenceLabel(task.recurrence) }}">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
+                            <polyline points="17 1 21 5 17 9"/>
+                            <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                            <polyline points="7 23 3 19 7 15"/>
+                            <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                          </svg>
+                          {{ recurrenceLabel(task.recurrence) }}
+                        </span>
+                      }
+                      @if (getTargetWeekLabel(task); as targetWeekLabel) {
+                        <span class="meta-chip target-week">{{ targetWeekLabel }}</span>
+                      } @else {
+                        <button
+                          type="button"
+                          class="meta-chip focus-chip"
+                          [attr.aria-expanded]="pendingFocusTaskId() === task.id"
+                          [class.focused]="task.focusThisWeek"
+                          (click)="onFocusToggle(task, $event)"
+                          [title]="task.focusThisWeek ? '今週のフォーカスを外す' : '今週やる'"
+                        >
+                          @if (task.focusThisWeek) {
+                            <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor">
+                              <path
+                                d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+                              />
+                            </svg>
+                            今週 {{ task.focusHours ?? task.estimatedHours }}h
+                          } @else {
+                            <svg
+                              viewBox="0 0 24 24"
+                              width="11"
+                              height="11"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2"
+                            >
+                              <path
+                                d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+                              />
+                            </svg>
+                            今週やる
+                          }
+                        </button>
+                      }
                     </div>
 
                     @if (isEpic) {
@@ -1254,14 +1787,44 @@
                           </svg>
                         </button>
                         @if (expandedSubtaskIds().has(task.id)) {
-                          <div class="subtasks">
+                          <div
+                            class="subtasks"
+                            cdkDropList
+                            [cdkDropListData]="children"
+                            [cdkDropListEnterPredicate]="canDropSubtask"
+                            (cdkDropListDropped)="reorderSubtasks($event, task.id)"
+                          >
                             @for (child of children; track child.id) {
-                              <div class="subtask-row" [id]="'task-' + child.id">
+                              <div
+                                class="subtask-row"
+                                [id]="'task-' + child.id"
+                                cdkDrag
+                                cdkDragLockAxis="y"
+                                [cdkDragData]="child"
+                                [cdkDragDisabled]="!canReorderSubtask(child)"
+                              >
+                                @if (canReorderSubtask(child)) {
+                                  <span
+                                    class="subtask-drag-handle"
+                                    cdkDragHandle
+                                    aria-hidden="true"
+                                    (click)="$event.stopPropagation()"
+                                  >
+                                    <svg viewBox="0 0 12 16" fill="currentColor">
+                                      <circle cx="3" cy="3" r="1.4" />
+                                      <circle cx="9" cy="3" r="1.4" />
+                                      <circle cx="3" cy="8" r="1.4" />
+                                      <circle cx="9" cy="8" r="1.4" />
+                                      <circle cx="3" cy="13" r="1.4" />
+                                      <circle cx="9" cy="13" r="1.4" />
+                                    </svg>
+                                  </span>
+                                }
                                 <span
                                   class="subtask-status"
                                   [class.done]="getStatusColor(child.status) === 'done'"
                                   [class.active]="getStatusColor(child.status) === 'active'"
-                                  (click)="toggleSubtaskStatus(child)"
+                                  (click)="toggleSubtaskStatus(child); $event.stopPropagation()"
                                   style="cursor: pointer"
                                   title="クリックで切り替え"
                                 >
@@ -1341,119 +1904,145 @@
                       </div>
                     }
 
-                    <button
-                      class="add-trigger"
-                      (click)="toggleAddForm(task.id)"
-                      style="margin-top: 8px"
-                    >
-                      + サブタスクを追加
-                    </button>
-
-                    @if (openEpicId === task.id) {
-                      <div
-                        class="add-form"
-                        (mousedown)="$event.stopPropagation()"
-                        (touchstart)="$event.stopPropagation()"
-                        (click)="$event.stopPropagation()"
+                    @if (
+                      children.length === 0 ||
+                      viewMode() === 'compact' ||
+                      expandedSubtaskIds().has(task.id)
+                    ) {
+                      <button
+                        class="add-trigger subtask-add-trigger"
+                        (click)="toggleAddForm(task.id)"
                       >
-                        <input
-                          type="text"
-                          [(ngModel)]="newSubtaskTitle"
-                          placeholder="サブタスク名"
-                          (input)="addSubtaskError = ''"
-                          (keydown.enter)="confirmAddSubtask(task.id)"
-                        />
-                        @if (addSubtaskError) {
-                          <div class="error-text">{{ addSubtaskError }}</div>
-                        }
-                        <textarea
-                          [(ngModel)]="newSubtaskDescription"
-                          placeholder="説明（任意）"
-                          class="desc-input"
-                          rows="2"
-                        ></textarea>
-                        <select [(ngModel)]="newSubtaskAssignee">
-                          <option [ngValue]="null">担当者(なし)</option>
-                          @for (m of sortedMembers(); track m.uid) {
-                            <option [ngValue]="m.uid">
-                              {{ m.name }}({{ tasksService.getLoadPercent(m.uid) }}%)
-                            </option>
-                          }
-                        </select>
-                        <div class="input-with-unit">
+                        + サブタスクを追加
+                      </button>
+
+                      @if (openEpicId === task.id) {
+                        <div
+                          class="add-form add-form-modal"
+                          [id]="'subtask-add-form-' + task.id"
+                          (mousedown)="$event.stopPropagation()"
+                          (touchstart)="$event.stopPropagation()"
+                          (click)="$event.stopPropagation()"
+                        >
                           <input
-                            type="number"
-                            [(ngModel)]="newSubtaskHours"
-                            min="0"
-                            step="0.5"
-                            placeholder="予定（任意）"
+                            type="text"
+                            [(ngModel)]="newSubtaskTitle"
+                            placeholder="サブタスク名"
+                            (input)="addSubtaskError = ''"
+                            (keydown.enter)="confirmAddSubtask(task.id)"
                           />
-                          <span class="unit">h</span>
-                        </div>
-                        <input type="date" [(ngModel)]="newSubtaskDueDate" />
-                        <select [(ngModel)]="newSubtaskPriority">
-                          <option [ngValue]="null">優先度を選ぶ(任意)</option>
-                          <option value="high">🔴 高</option>
-                          <option value="medium">🟡 中</option>
-                          <option value="low">🟢 低</option>
-                        </select>
-
-                        @if (newSubtaskAssignee) {
-                          @let pct = getLoadPct(newSubtaskAssignee);
-                          @let level = loadLevel(pct);
-                          <div class="load-preview">
-                            <span>{{ getMemberName(newSubtaskAssignee) }} 負荷</span>
-                            <div class="lp-bar">
-                              <div
-                                class="lp-fill"
-                                [class]="level"
-                                [style.width.%]="pct > 100 ? 100 : pct"
-                              ></div>
-                            </div>
-                            <span>{{ pct }}%</span>
-                          </div>
-                          @if (level === 'danger') {
-                            <div class="warning-box">
-                              <svg
-                                class="chip-icon"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                              >
-                                <path
-                                  d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
-                                />
-                                <line x1="12" y1="9" x2="12" y2="13" />
-                                <line x1="12" y1="17" x2="12.01" y2="17" />
-                              </svg>
-                              {{ getMemberName(newSubtaskAssignee) }}さんの負荷が{{
-                                pct
-                              }}%を超えます。
-                              @if (suggestAlternative(newSubtaskAssignee); as alt) {
-                                <br /><button
-                                  class="suggest"
-                                  (click)="newSubtaskAssignee = alt.uid"
-                                >
-                                  提案: {{ alt.name }} ({{ alt.pct }}%) に変更
-                                </button>
-                              }
-                            </div>
+                          @if (addSubtaskError) {
+                            <div class="error-text">{{ addSubtaskError }}</div>
                           }
-                        }
+                          <select [(ngModel)]="newSubtaskAssignee">
+                            <option [ngValue]="null">担当者（未割当）</option>
+                            @for (m of sortedMembers(); track m.uid) {
+                              <option [ngValue]="m.uid">
+                                {{ m.name }}（{{ tasksService.getFocusLoadPercent(m.uid) }}%）
+                              </option>
+                            }
+                          </select>
+                          <div class="add-form-row">
+                            <div class="add-form-field">
+                              <label>見積もり</label>
+                              <div class="input-with-unit">
+                                <input
+                                  type="number"
+                                  [(ngModel)]="newSubtaskHours"
+                                  min="0"
+                                  step="0.5"
+                                />
+                                <span class="unit">h</span>
+                              </div>
+                            </div>
+                            <div class="add-form-field">
+                              <label>締切日</label>
+                              <input type="date" [(ngModel)]="newSubtaskDueDate" />
+                            </div>
+                          </div>
+                          <div class="add-form-row">
+                            <div class="add-form-field">
+                              <label>優先度</label>
+                              <select [(ngModel)]="newSubtaskPriority">
+                                <option [ngValue]="null">なし</option>
+                                <option value="high">🔴 高</option>
+                                <option value="medium">🟡 中</option>
+                                <option value="low">🟢 低</option>
+                              </select>
+                            </div>
+                          </div>
 
-                        <div class="add-form-actions">
-                          <button (click)="toggleAddForm(task.id)">キャンセル</button>
-                          <button class="confirm" (click)="confirmAddSubtask(task.id)">追加</button>
+                          @if (newSubtaskAssignee) {
+                            @let pct = getLoadPct(newSubtaskAssignee);
+                            @let level = loadLevel(pct);
+                            <div class="load-preview">
+                              <span>{{ getMemberName(newSubtaskAssignee) }}の負荷</span>
+                              <div class="lp-bar">
+                                <div
+                                  class="lp-fill"
+                                  [class]="level"
+                                  [style.width.%]="pct > 100 ? 100 : pct"
+                                ></div>
+                              </div>
+                              <span>{{ pct }}%</span>
+                            </div>
+                            @if (level === 'danger') {
+                              <div class="warning-box">
+                                <svg
+                                  class="chip-icon"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  stroke-width="2"
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                >
+                                  <path
+                                    d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                                  />
+                                  <line x1="12" y1="9" x2="12" y2="13" />
+                                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                                </svg>
+                                {{ getMemberName(newSubtaskAssignee) }}さんの負荷が{{
+                                  pct
+                                }}%を超えます。
+                                @if (getAlternativeCandidates(newSubtaskAssignee).length > 0) {
+                                  <div class="alt-select-row">
+                                    <select
+                                      class="alt-select"
+                                      (change)="newSubtaskAssignee = $any($event.target).value"
+                                    >
+                                      <option value="" disabled selected>
+                                        代わりの担当者を選ぶ
+                                      </option>
+                                      @for (
+                                        c of getAlternativeCandidates(newSubtaskAssignee);
+                                        track c.uid
+                                      ) {
+                                        <option [value]="c.uid">
+                                          {{ c.name }}（{{ c.pct }}%）
+                                        </option>
+                                      }
+                                    </select>
+                                  </div>
+                                }
+                              </div>
+                            }
+                          }
+
+                          <div class="add-form-actions">
+                            <button (click)="toggleAddForm(task.id)">キャンセル</button>
+                            <button class="confirm" (click)="confirmAddSubtask(task.id)">
+                              追加
+                            </button>
+                          </div>
                         </div>
-                      </div>
+                      }
                     }
 
-                    @if (canMoveTask(task)) {
+                    @if (canMoveTask(task) && task.status !== '差し戻し中') {
                       <div class="move-buttons">
-                        @if (status === '進行中' || status === '差し戻し中') {
+                        @if (status === '進行中') {
                           <button
                             [disabled]="!canMoveTask(task)"
                             (click)="moveTask(task, '未着手')"
@@ -1469,12 +2058,7 @@
                             {{ viewMode() === 'compact' ? '← 戻す' : '← 進行中に戻す' }}
                           </button>
                         }
-                        @if (
-                          canMoveTask(task) &&
-                          status === '進行中' &&
-                          task.status !== '差し戻し中' &&
-                          !isManager()
-                        ) {
+                        @if (canMoveTask(task) && status === '進行中' && !isManager()) {
                           <button class="review-btn" (click)="requestReview(task)">差し戻す</button>
                         }
                         @if (status !== '完了') {
@@ -1519,6 +2103,15 @@
 
                     @if (task.status === '差し戻し中') {
                       <div class="review-box">
+                        @if (canMoveTask(task)) {
+                          <button
+                            class="review-dismiss-btn"
+                            title="差し戻し取り消し"
+                            (click)="startWithdrawReview(task, $event)"
+                          >
+                            ×
+                          </button>
+                        }
                         <div class="review-reason">
                           <svg
                             viewBox="0 0 24 24"
@@ -1539,12 +2132,12 @@
                           {{ task.reviewReason }}
                         </div>
                         @if (isManager()) {
-                          <div class="add-form-actions" style="margin-top: 8px">
-                            <button (click)="tasksService.rejectReview(task.id)">
-                              却下(進行中に戻す)
+                          <div class="review-actions">
+                            <button (click)="startReviewAction(task, 'reject', $event)">
+                              却下<span class="review-btn-detail">(進行中に戻す)</span>
                             </button>
-                            <button class="confirm" (click)="tasksService.approveReview(task.id)">
-                              承認(未着手に戻す)
+                            <button (click)="startReviewAction(task, 'approve', $event)">
+                              承認<span class="review-btn-detail">(未着手に戻す)</span>
                             </button>
                           </div>
                         } @else {
@@ -1661,7 +2254,11 @@
         {{ pendingAdd.name }}さんの負荷が{{ pendingAdd.pct }}%になります
       </h3>
       <p class="modal-sub">
-        このタスクを追加すると週の稼働可能時間を超えます。他のタスクの遅延につながる可能性があります。
+        @if (pendingAdd.kind === 'edit') {
+          この変更で週の稼働可能時間を超えます。他のタスクの遅延につながる可能性があります。
+        } @else {
+          このタスクを追加すると週の稼働可能時間を超えます。他のタスクの遅延につながる可能性があります。
+        }
       </p>
       @if (pendingAdd.candidates.length > 0) {
         <div class="alt-candidates">
@@ -1722,11 +2319,51 @@
   </div>
 }
 
+@if (withdrawingTask) {
+  <div class="modal-overlay" (click)="cancelWithdrawReview()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <h3>「{{ withdrawingTask.title }}」の差し戻しを取り消しますか？</h3>
+      <p class="modal-sub">ステータスが「進行中」に戻ります。Managerに通知されます。</p>
+      <div class="add-form-actions">
+        <button type="button" (click)="cancelWithdrawReview()">キャンセル</button>
+        <button type="button" class="confirm danger" (click)="confirmWithdrawReview()">
+          取り消す
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (reviewActionTask) {
+  <div class="modal-overlay" (click)="cancelReviewAction()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <h3>
+        「{{ reviewActionTask.title }}」の差し戻しを{{
+          reviewActionType === 'approve' ? '承認' : '却下'
+        }}しますか？
+      </h3>
+      <p class="modal-sub">
+        {{
+          reviewActionType === 'approve'
+            ? 'ステータスが「未着手」に戻ります。'
+            : 'ステータスが「進行中」に戻ります。'
+        }}
+      </p>
+      <div class="add-form-actions">
+        <button type="button" (click)="cancelReviewAction()">キャンセル</button>
+        <button type="button" class="confirm" (click)="confirmReviewAction()">
+          {{ reviewActionType === 'approve' ? '承認する' : '却下する' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
 @if (editingCapacityMember) {
   <div class="modal-overlay" (click)="cancelCapacityEdit()">
     <div class="modal" (click)="$event.stopPropagation()">
       <h3>{{ editingCapacityMember.name }} さん</h3>
-      <p class="modal-sub">1週間の稼働可能時間（h）を変更します</p>
+      <p class="modal-sub">１週間の稼働可能時間（h）を変更します</p>
       <input type="number" min="1" step="1" [(ngModel)]="capacityInput" class="modal-input" />
       <div class="add-form-actions">
         <button type="button" (click)="cancelCapacityEdit()">キャンセル</button>
@@ -1736,10 +2373,22 @@
   </div>
 }
 
-@if (editingTask) {
+@if (editingTask && pendingAdd?.kind !== 'edit') {
   <div class="modal-overlay" (click)="cancelEditTask()">
     <div class="modal" (click)="$event.stopPropagation()">
-      <h3>タスクの編集</h3>
+      <div class="edit-modal-header">
+        <h3>タスクの編集</h3>
+        @if (!editingTask.parentId) {
+          <button type="button" class="save-as-template-icon" (click)="saveEditingTaskAsTemplate()" title="テンプレとして保存">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <line x1="3" y1="9" x2="21" y2="9"/>
+              <line x1="9" y1="21" x2="9" y2="9"/>
+            </svg>
+            テンプレ保存
+          </button>
+        }
+      </div>
       <input
         type="text"
         [(ngModel)]="editTaskTitle"
@@ -1748,12 +2397,14 @@
         style="text-align: left; font-size: 14px"
         (keydown.enter)="confirmEditTask()"
       />
-      <textarea
-        [(ngModel)]="editTaskDescription"
-        placeholder="説明（任意）"
-        class="modal-textarea desc-edit"
-        rows="3"
-      ></textarea>
+      @if (!editingTask.parentId) {
+        <textarea
+          [(ngModel)]="editTaskDescription"
+          placeholder="説明（任意）"
+          class="modal-textarea desc-edit"
+          rows="3"
+        ></textarea>
+      }
       <select
         [(ngModel)]="editTaskPriority"
         class="modal-input"
@@ -1769,15 +2420,29 @@
         class="modal-input"
         style="text-align: left; font-size: 14px; margin-bottom: 12px; width: 100%"
       >
-        <option [ngValue]="null">担当者(なし)</option>
+        <option [ngValue]="null">担当者（なし）</option>
         @for (m of sortedMembers(); track m.uid) {
           <option [ngValue]="m.uid">{{ m.name }}</option>
         }
       </select>
+      @if (!editingTask.parentId) {
+        <select
+          [(ngModel)]="editTaskRecurrence"
+          class="modal-input"
+          style="text-align: left; font-size: 14px; margin-bottom: 12px; width: 100%"
+        >
+          <option [ngValue]="null">繰り返し（なし）</option>
+          <option value="daily">毎日</option>
+          <option value="weekly">毎週</option>
+          <option value="biweekly">隔週</option>
+          <option value="monthly">毎月</option>
+        </select>
+      }
       <div class="input-with-unit">
         <input
           type="number"
-          [(ngModel)]="editTaskHours"
+          [ngModel]="editTaskHours"
+          (ngModelChange)="onEditEstimatedHoursChange($event)"
           min="0.5"
           step="0.5"
           placeholder="予定"
@@ -1786,7 +2451,7 @@
         />
         <span class="unit">h</span>
       </div>
-      <div class="form-label">締切日(任意)</div>
+      <div class="form-label">締切日（任意）</div>
       <input
         type="date"
         [(ngModel)]="editTaskDueDate"
@@ -1812,6 +2477,58 @@
             <line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
           {{ dueDateErr }}
+        </div>
+      }
+      @if (!editingTask?.parentId) {
+        <div class="focus-edit-section">
+          <label class="focus-edit-label">
+            <input type="checkbox" [checked]="editTaskFocus" (change)="onEditFocusChange()" />
+            今週やる（フォーカス）
+          </label>
+          @if (editTaskFocus) {
+            <div class="focus-edit-hours">
+              <label>今週の予定時間</label>
+              <div class="input-with-unit">
+                <input
+                  type="number"
+                  [ngModel]="editTaskFocusHours"
+                  (ngModelChange)="onEditFocusHoursChange($event)"
+                  min="0"
+                  [max]="editTaskHours"
+                  step="0.5"
+                  class="modal-input"
+                  style="text-align: left; font-size: 14px"
+                />
+                <span class="unit">h</span>
+              </div>
+            </div>
+          }
+        </div>
+      }
+      @if (!editingTask?.parentId) {
+        <div class="target-week-section">
+          <label class="form-label">作業予定週</label>
+          <div class="target-week-options">
+            <button
+              type="button"
+              class="target-week-chip"
+              [class.active]="editTaskTargetWeek === null"
+              (click)="onEditTargetWeekChange(null)"
+            >
+              未指定
+            </button>
+            @for (opt of getTargetWeekOptions(); track opt.value) {
+              <button
+                type="button"
+                class="target-week-chip"
+                [class.active]="editTaskTargetWeek === opt.value"
+                [disabled]="opt.disabled"
+                (click)="onEditTargetWeekChange(opt.value)"
+              >
+                {{ opt.label }}
+              </button>
+            }
+          </div>
         </div>
       }
       @if (!editingTask.parentId) {
@@ -1847,3 +2564,50 @@
     </div>
   </div>
 }
+
+<!-- A single top-layer popover shared by all cards, outside card layout/overflow. -->
+<form
+  #focusPopover
+  popover="auto"
+  class="focus-hours-popover"
+  [style.left.px]="focusPopoverLeft()"
+  [style.top.px]="focusPopoverTop()"
+  (toggle)="onFocusPopoverToggle($event)"
+  (click)="$event.stopPropagation()"
+  (submit)="saveFocusHoursFromPopover($event)"
+>
+  @if (pendingFocusTask(); as task) {
+    <label for="board-focus-hours">今週の予定時間</label>
+    <div class="focus-hours-field">
+      <input
+        id="board-focus-hours"
+        name="focusHours"
+        type="number"
+        min="0.1"
+        [max]="task.estimatedHours"
+        step="0.1"
+        required
+        [value]="focusHoursDraft() ?? ''"
+        (input)="onFocusHoursInput($event)"
+        [disabled]="focusSaving()"
+      />
+      <span>時間</span>
+    </div>
+    @if (focusSaveError()) {
+      <p role="alert">{{ focusSaveError() }}</p>
+    }
+    <div class="focus-hours-actions">
+      <button
+        type="button"
+        class="focus-hours-cancel"
+        (click)="closeFocusPopover()"
+        [disabled]="focusSaving()"
+      >
+        キャンセル
+      </button>
+      <button type="submit" class="focus-hours-save" [disabled]="focusSaving()">
+        {{ focusSaving() ? '保存中…' : '追加' }}
+      </button>
+    </div>
+  }
+</form>

@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { CdkDragDrop, DragDropModule, moveItemInArray } from '@angular/cdk/drag-drop';
 import { TasksService } from '../../core/services/tasks.service';
 import { AuthService } from '../../core/services/auth.service';
-import { Member } from '../../core/models/task.model';
+import { Member, Priority, TaskTemplate } from '../../core/models/task.model';
 import { NotificationService } from '../../core/services/notification.service';
 import { saveMemberOrder, sortMembersBySavedOrder } from '../../core/utils/member-order';
 
@@ -66,7 +66,7 @@ export class SettingsComponent {
       members,
       uid ?? null,
       (member) => member.uid,
-      (a, b) => this.tasksService.getLoadPercent(b.uid) - this.tasksService.getLoadPercent(a.uid),
+      (a, b) => this.tasksService.getFocusLoadPercent(b.uid) - this.tasksService.getFocusLoadPercent(a.uid),
     );
   });
 
@@ -199,6 +199,104 @@ export class SettingsComponent {
     } catch (e) {
       console.error('稼働時間更新エラー:', e);
       this.notificationService.show('エラー', '稼働時間の更新に失敗しました');
+    }
+  }
+
+  // --- テンプレート ---
+
+  templates = computed(() => this.tasksService.templates());
+
+  templateFormOpen = false;
+  editingTemplate: TaskTemplate | null = null;
+  deletingTemplate: TaskTemplate | null = null;
+
+  tplTitle = '';
+  tplDescription = '';
+  tplPriority: Priority | null = null;
+  tplHours = 0;
+  tplSubtasks: { title: string; estimatedHours: number }[] = [];
+
+  priorityLabel(p: Priority): string {
+    return { high: '高', medium: '中', low: '低' }[p];
+  }
+
+  openAddTemplate(): void {
+    this.editingTemplate = null;
+    this.tplTitle = '';
+    this.tplDescription = '';
+    this.tplPriority = null;
+    this.tplHours = 0;
+    this.tplSubtasks = [];
+    this.templateFormOpen = true;
+  }
+
+  openEditTemplate(tpl: TaskTemplate): void {
+    this.editingTemplate = tpl;
+    this.tplTitle = tpl.title;
+    this.tplDescription = tpl.description;
+    this.tplPriority = tpl.priority;
+    this.tplHours = tpl.estimatedHours;
+    this.tplSubtasks = tpl.subtasks.map(s => ({ ...s }));
+    this.templateFormOpen = true;
+  }
+
+  cancelTemplateForm(): void {
+    this.templateFormOpen = false;
+    this.editingTemplate = null;
+  }
+
+  addSubtask(): void {
+    this.tplSubtasks.push({ title: '', estimatedHours: 0 });
+  }
+
+  removeSubtask(index: number): void {
+    this.tplSubtasks.splice(index, 1);
+  }
+
+  async saveTemplate(): Promise<void> {
+    const uid = this.auth.currentUser()?.uid;
+    if (!uid || !this.tplTitle.trim()) return;
+
+    const data = {
+      title: this.tplTitle.trim(),
+      description: this.tplDescription.trim(),
+      priority: this.tplPriority,
+      estimatedHours: this.tplHours || 0,
+      subtasks: this.tplSubtasks.filter(s => s.title.trim()),
+      createdBy: uid,
+    };
+
+    try {
+      if (this.editingTemplate) {
+        await this.tasksService.updateTemplate(this.editingTemplate.id, data);
+        this.notificationService.show('更新完了', 'テンプレートを更新しました');
+      } else {
+        await this.tasksService.createTemplate(data);
+        this.notificationService.show('追加完了', 'テンプレートを追加しました');
+      }
+    } catch (e) {
+      console.error('テンプレート保存エラー:', e);
+      this.notificationService.show('エラー', 'テンプレートの保存に失敗しました');
+    }
+
+    this.templateFormOpen = false;
+    this.editingTemplate = null;
+  }
+
+  openDeleteTemplate(tpl: TaskTemplate): void {
+    this.deletingTemplate = tpl;
+  }
+
+  async confirmDeleteTemplate(): Promise<void> {
+    if (!this.deletingTemplate) return;
+    const tpl = this.deletingTemplate;
+    this.deletingTemplate = null;
+    try {
+      await this.tasksService.deleteTemplate(tpl.id);
+      this.notificationService.show('削除完了', 'テンプレートを削除しました');
+    } catch (e) {
+      console.error('テンプレート削除エラー:', e);
+      this.notificationService.show('エラー', 'テンプレートの削除に失敗しました');
     }
   }
 }
