@@ -1871,10 +1871,15 @@ export class BoardComponent {
     this.scrollToTask(task.id);
   }
 
-  private scrollToTask(taskId: string): void {
+  private scrollToTask(taskId: string, attempts = 0): void {
     requestAnimationFrame(() => {
       const el = document.getElementById(`task-${taskId}`);
-      if (!el) return;
+      if (!el) {
+        if (attempts < 15) {
+          setTimeout(() => this.scrollToTask(taskId, attempts + 1), 200);
+        }
+        return;
+      }
       const container = el.closest<HTMLElement>('.board-outer');
       if (!container) return;
       const elRect = el.getBoundingClientRect();

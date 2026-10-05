@@ -1,0 +1,1 @@
+﻿const fs=require('fs'),p='src/app/features/settings/settings.scss';let s=fs.readFileSync(p,'utf8');s=s.replace('  button:focus-visible, input:focus-visible, summary:focus-visible {','  input:focus {\n    outline: none;\n    border-color: var(--accent);\n  }\n  button:focus-visible, summary:focus-visible {');fs.writeFileSync(p,s);

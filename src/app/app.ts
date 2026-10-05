@@ -1460,6 +1460,7 @@ export class App {
   applyFabTemplate(tpl: TaskTemplate): void {
     this.fabTitle = tpl.title;
     this.fabDescription = tpl.description || '';
+    this.fabAssignee = tpl.assigneeId ?? null;
     this.fabHours = tpl.estimatedHours || 1;
     this.fabPriority = tpl.priority;
     this.fabTemplateSubtasks = tpl.subtasks?.filter((s) => s.title.trim()) ?? [];
@@ -1504,6 +1505,9 @@ export class App {
       this.fabTemplateSubtasks = [];
       this.notificationService.show('タスク作成', `「${title}」を作成しました`);
       this.closeFabModal();
+      if (this.router.url.startsWith('/board')) {
+        this.router.navigate(['/board'], { queryParams: { taskId: parentId } });
+      }
     } catch (e) {
       console.error('FABタスク作成エラー:', e);
       this.fabError = 'タスクの作成に失敗しました';

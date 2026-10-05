@@ -1,3 +1,4 @@
+import { buildCalendarTimeOff, CalendarTimeOff } from '../../core/utils/calendar-time-off';
 import { Component, HostListener, inject, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Timestamp } from '@angular/fire/firestore';
@@ -8,7 +9,7 @@ import { Member, Task } from '../../core/models/task.model';
 import { AuthService } from '../../core/services/auth.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { saveMemberOrder, sortMembersBySavedOrder } from '../../core/utils/member-order';
-import { getForecastWeekLabels, getWeekMonday } from '../../core/utils/week-utils';
+import { formatDateString, getForecastWeekLabels, getWeekMonday } from '../../core/utils/week-utils';
 
 interface MemberStat {
   member: Member;
@@ -29,6 +30,7 @@ interface CalendarDay {
   day: number;
   isToday: boolean;
   tasks: Task[];
+  timeOff: CalendarTimeOff[];
 }
 
 @Component({
@@ -300,8 +302,13 @@ export class DashboardComponent {
   // 表示月のオフセット(0=今月、1=来月、-1=先月)
   monthOffset = signal(0);
 
+  selectedTimeOffDay = signal<CalendarDay | null>(null);
+
+  readonly isCalendarHoliday = (entry: CalendarTimeOff) => entry.kind === 'holiday';
+
   calendarMonths = computed(() => {
     const now = new Date();
+    const timeOff = buildCalendarTimeOff(this.tasksService.teamSettings()?.holidays ?? [], this.tasksService.members());
     const months = [];
     const monthCount = this.isMobile() ? 1 : 2;
 
@@ -327,7 +334,7 @@ export class DashboardComponent {
           const due = t.dueDate.toDate();
           return due.getFullYear() === year && due.getMonth() === month && due.getDate() === d;
         });
-        days.push({ date, day: d, isToday, tasks });
+        days.push({ date, day: d, isToday, tasks, timeOff: timeOff.get(formatDateString(date)) ?? [] });
       }
 
       months.push({ label: `${year}年${month + 1}月`, days });

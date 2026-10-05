@@ -39,6 +39,23 @@ export interface Task {
   recurrenceSourceId: string | null;
 }
 
+export type LeavePeriod = 'full' | 'am' | 'pm';
+
+export interface MemberLeave {
+  date: string;
+  label: string;
+  period?: LeavePeriod;
+}
+
+export interface TeamHoliday {
+  date: string;
+  name: string;
+}
+
+export interface TeamSettings {
+  holidays: TeamHoliday[];
+}
+
 export interface Member {
   uid: string;
   name: string;
@@ -46,6 +63,7 @@ export interface Member {
   weeklyCapacityHours: number;
   avatarColor: string;
   theme?: string;
+  leaves?: MemberLeave[];
 }
 
 export interface TaskComment {

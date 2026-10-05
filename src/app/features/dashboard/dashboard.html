@@ -334,6 +334,7 @@
                   class="cal-cell"
                   [class.today]="day.isToday"
                   [class.has-tasks]="day.tasks.length > 0"
+                  [class.has-holiday]="day.timeOff.some(isCalendarHoliday)"
                   [class.sun]="day.date.getDay() === 0"
                   [class.sat]="day.date.getDay() === 6"
                   cdkDropList
@@ -342,6 +343,14 @@
                   (cdkDropListDropped)="moveTaskDueDate($event.item.data, day.date)"
                 >
                   <div class="cal-day">{{ day.day }}</div>
+                  @let holidayCount = day.timeOff.filter(isCalendarHoliday).length;
+                  @let leaveCount = day.timeOff.length - holidayCount;
+                  @if (holidayCount > 0) {
+                    <button type="button" class="cal-time-off holiday" (click)="selectedTimeOffDay.set(day); $event.stopPropagation()" [attr.aria-label]="(day.date | date:'M月d日') + 'の休日を表示'">休日</button>
+                  }
+                  @if (leaveCount > 0) {
+                    <button type="button" class="cal-time-off" (click)="selectedTimeOffDay.set(day); $event.stopPropagation()" [attr.aria-label]="(day.date | date:'M月d日') + 'の休暇を表示'">休暇{{ leaveCount > 1 ? ' ' + leaveCount + '人' : '' }}</button>
+                  }
                   @for (task of day.tasks; track task.id) {
                     <div
                       class="cal-task"
@@ -620,5 +629,22 @@
         <button class="danger" (click)="confirmDeleteTask()">削除する</button>
       </div>
     </div>
+  </div>
+}
+
+@if (selectedTimeOffDay(); as day) {
+  <div class="time-off-overlay" (click)="selectedTimeOffDay.set(null)" (keydown.escape)="selectedTimeOffDay.set(null)">
+    <section class="time-off-dialog" role="dialog" aria-modal="true" aria-labelledby="time-off-title" (click)="$event.stopPropagation()">
+      <div class="time-off-heading">
+        <h3 id="time-off-title">{{ day.date | date:'M月d日' }}の休日・休暇</h3>
+        <button type="button" (click)="selectedTimeOffDay.set(null)" aria-label="閉じる" autofocus>×</button>
+      </div>
+      @for (entry of day.timeOff; track entry.id) {
+        <div class="time-off-detail" [class.holiday]="entry.kind === 'holiday'">
+          <span class="time-off-kind">{{ entry.kind === 'holiday' ? '休日' : '休暇' }}</span>
+          <span>{{ entry.label }}</span>
+        </div>
+      }
+    </section>
   </div>
 }

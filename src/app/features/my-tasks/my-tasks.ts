@@ -1,3 +1,4 @@
+import { buildCalendarTimeOff, CalendarTimeOff } from '../../core/utils/calendar-time-off';
 import {
   ElementRef,
   ViewChild,
@@ -17,7 +18,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { Timestamp } from '@angular/fire/firestore';
 import { Task, TaskStatus } from '../../core/models/task.model';
-import { getForecastWeekLabels, getWeekMonday } from '../../core/utils/week-utils';
+import { formatDateString, getForecastWeekLabels, getWeekMonday } from '../../core/utils/week-utils';
 
 type MyTaskTab = 'active' | 'completed';
 type SortKey = 'default' | 'priority' | 'dueDate' | 'status';
@@ -604,8 +605,14 @@ export class MyTasksComponent {
     this.isMobile.set(window.innerWidth <= 768);
   }
 
+  selectedTimeOffDay = signal<CalendarDay | null>(null);
+
+  readonly isCalendarHoliday = (entry: CalendarTimeOff) => entry.kind === 'holiday';
+
   calendarMonths = computed(() => {
     const now = new Date();
+    const uid = this.auth.currentUser()?.uid ?? '';
+    const timeOff = buildCalendarTimeOff(this.tasksService.teamSettings()?.holidays ?? [], this.tasksService.members(), uid);
     const months: { label: string; days: (CalendarDay | null)[] }[] = [];
     const monthCount = this.isMobile() ? 1 : 2;
     const tasks = this.myTasks();
@@ -632,7 +639,7 @@ export class MyTasksComponent {
           const due = t.dueDate.toDate();
           return due.getFullYear() === year && due.getMonth() === month && due.getDate() === d;
         });
-        days.push({ date, day: d, isToday, tasks: dayTasks });
+        days.push({ date, day: d, isToday, tasks: dayTasks, timeOff: timeOff.get(formatDateString(date)) ?? [] });
       }
 
       months.push({ label: `${year}年${month + 1}月`, days });
@@ -802,4 +809,5 @@ interface CalendarDay {
   day: number;
   isToday: boolean;
   tasks: Task[];
+  timeOff: CalendarTimeOff[];
 }

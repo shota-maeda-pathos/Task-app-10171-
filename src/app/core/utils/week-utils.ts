@@ -27,3 +27,25 @@ export function getForecastWeekLabels(): string[] {
   }
   return labels;
 }
+
+export function formatDateString(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function expandWeekdayRange(startStr: string, endStr: string): string[] {
+  const dates: string[] = [];
+  const start = new Date(startStr + 'T00:00:00');
+  const end = new Date(endStr + 'T00:00:00');
+  const cur = new Date(start);
+  while (cur <= end) {
+    const day = cur.getDay();
+    if (day !== 0 && day !== 6) {
+      dates.push(formatDateString(cur));
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return dates;
+}

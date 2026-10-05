@@ -1,9 +1,10 @@
+import { leaveDayFraction, mergeMemberLeaves } from '../utils/leave-utils';
 import { Injectable, inject, Injector, runInInjectionContext, computed, effect } from '@angular/core';
 import { Auth, user } from '@angular/fire/auth';
 import { Storage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from '@angular/fire/storage';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Observable, switchMap, of, map, catchError } from 'rxjs';
-import { Firestore, collectionData } from '@angular/fire/firestore';
+import { Firestore, collectionData, docData } from '@angular/fire/firestore';
 import {
   collection,
   doc,
@@ -18,6 +19,7 @@ import {
   getDocs,
   getDoc,
   writeBatch,
+  runTransaction,
   Timestamp,
 } from 'firebase/firestore';
 import {
@@ -30,8 +32,11 @@ import {
   TaskAttachment,
   TaskTemplate,
   RecurrenceType,
+  TeamSettings,
+  TeamHoliday,
+  MemberLeave,
 } from '../models/task.model';
-import { getWeekIndex, getWeekMonday } from '../utils/week-utils';
+import { getWeekIndex, getWeekMonday, formatDateString } from '../utils/week-utils';
 
 const VALID_STATUSES: Set<string> = new Set<string>([
   '未着手',
@@ -50,6 +55,7 @@ export class TasksService {
   private tasksCollection = collection(this.firestore, 'tasks');
   private membersCollection = collection(this.firestore, 'members');
   private templatesCollection = collection(this.firestore, 'taskTemplates');
+  private teamSettingsDoc = doc(this.firestore, 'teamSettings', 'default');
   private watchedTaskIds = new Set<string>();
   private weeklyFocusActivated = false;
   private rootReorderQueue: Promise<void> = Promise.resolve();
@@ -115,6 +121,21 @@ export class TasksService {
       }),
     ) as Observable<Member[]>,
     { initialValue: [] as Member[] },
+  );
+
+  teamSettings = toSignal(
+    user(this.auth).pipe(
+      switchMap((currentUser) => {
+        if (!currentUser) return of({ holidays: [] } as TeamSettings);
+        return runInInjectionContext(this.injector, () =>
+          (docData(this.teamSettingsDoc) as Observable<TeamSettings>).pipe(
+            map((data) => data ?? { holidays: [] }),
+            catchError(() => of({ holidays: [] } as TeamSettings)),
+          ),
+        );
+      }),
+    ) as Observable<TeamSettings>,
+    { initialValue: { holidays: [] } as TeamSettings },
   );
 
   private allTemplates = toSignal(
@@ -788,6 +809,78 @@ export class TasksService {
     return diffDays >= thresholdDays;
   }
 
+  async dismissStalled(taskId: string): Promise<void> {
+    const ref = doc(this.firestore, 'tasks', taskId);
+    await updateDoc(ref, { statusUpdatedAt: serverTimestamp() });
+  }
+
+  // --- 祝日・休暇 ---
+
+  async addHoliday(holiday: TeamHoliday): Promise<void> {
+    const current = this.teamSettings()?.holidays ?? [];
+    if (current.some((h) => h.date === holiday.date)) return;
+    await setDoc(this.teamSettingsDoc, { holidays: [...current, holiday] }, { merge: true });
+  }
+
+  async addHolidays(holidays: TeamHoliday[]): Promise<number> {
+    return runTransaction(this.firestore, async transaction => {
+      const snapshot = await transaction.get(this.teamSettingsDoc);
+      const current = (snapshot.data()?.['holidays'] ?? []) as TeamHoliday[];
+      const added = getNewHolidays(current, holidays);
+      if (added.length > 0) {
+        transaction.set(this.teamSettingsDoc, {
+          holidays: [...current, ...added].sort((a, b) => a.date.localeCompare(b.date)),
+        }, { merge: true });
+      }
+      return added.length;
+    });
+  }
+
+  async removeHoliday(date: string): Promise<void> {
+    const current = this.teamSettings()?.holidays ?? [];
+    await setDoc(this.teamSettingsDoc, { holidays: current.filter((h) => h.date !== date) }, { merge: true });
+  }
+
+  async addLeave(memberId: string, leaves: MemberLeave[]): Promise<void> {
+    const ref = doc(this.firestore, 'members', memberId);
+    await runTransaction(this.firestore, async transaction => {
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists()) throw new Error('メンバーが見つかりません');
+      const current = (snapshot.data()['leaves'] ?? []) as MemberLeave[];
+      transaction.update(ref, { leaves: mergeMemberLeaves(current, leaves) });
+    });
+  }
+
+  async removeLeave(memberId: string, date: string): Promise<void> {
+    const member = this.members().find((m) => m.uid === memberId);
+    const current = member?.leaves ?? [];
+    const ref = doc(this.firestore, 'members', memberId);
+    await updateDoc(ref, { leaves: current.filter((l) => l.date !== date) });
+  }
+
+  getWorkingDays(memberId: string, weekIndex: number): number {
+    const monday = getWeekMonday(new Date());
+    const weekStart = new Date(monday);
+    weekStart.setDate(weekStart.getDate() + weekIndex * 7);
+
+    const holidays = this.teamSettings()?.holidays ?? [];
+    const member = this.members().find((m) => m.uid === memberId);
+    const leaves = member?.leaves ?? [];
+
+    let workingDays = 5;
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(weekStart);
+      d.setDate(d.getDate() + i);
+      const dateStr = formatDateString(d);
+      if (holidays.some((h) => h.date === dateStr)) {
+        workingDays--;
+      } else {
+        workingDays -= leaveDayFraction(leaves.filter(leave => leave.date === dateStr));
+      }
+    }
+    return workingDays;
+  }
+
   getBlockingCount(taskId: string): number {
     return this.tasks().filter((t) => t.blockedBy?.includes(taskId) && t.status !== '完了').length;
   }
@@ -832,7 +925,7 @@ export class TasksService {
 
       let hours = t.focusHours ?? t.estimatedHours ?? 0;
       if (t.recurrence === 'daily') {
-        hours = (t.estimatedHours ?? 0) * 5;
+        hours = (t.estimatedHours ?? 0) * this.getWorkingDays(memberId, 0);
       }
 
       const children = tasks.filter((c) => c.parentId === t.id);
@@ -874,7 +967,10 @@ export class TasksService {
     if (!member) return 0;
     const focusHours = this.getMemberFocusHours(memberId);
     if (!member.weeklyCapacityHours || member.weeklyCapacityHours <= 0) return 0;
-    return Math.round((focusHours / member.weeklyCapacityHours) * 100);
+    const workingDays = this.getWorkingDays(memberId, 0);
+    const adjustedCapacity = member.weeklyCapacityHours * (workingDays / 5);
+    if (adjustedCapacity <= 0) return 0;
+    return Math.round((focusHours / adjustedCapacity) * 100);
   }
 
   getMemberFocusTaskCount(memberId: string): number {
@@ -941,8 +1037,8 @@ export class TasksService {
       if (t.recurrence) {
         const perOccurrence = t.estimatedHours ?? 0;
         if (t.recurrence === 'daily') {
-          const weeklyTotal = perOccurrence * 5;
           for (let w = 0; w <= 3; w++) {
+            const weeklyTotal = perOccurrence * this.getWorkingDays(memberId, w);
             const existing = weekIndices.find((wi) => wi.idx === w);
             if (existing) {
               existing.hours = weeklyTotal;
@@ -1350,4 +1446,13 @@ export class TasksService {
 
     return taskId;
   }
+}
+
+export function getNewHolidays(current: TeamHoliday[], holidays: TeamHoliday[]): TeamHoliday[] {
+      const dates = new Set(current.map(holiday => holiday.date));
+      return holidays.filter(holiday => {
+        if (dates.has(holiday.date)) return false;
+        dates.add(holiday.date);
+        return true;
+      });
 }
