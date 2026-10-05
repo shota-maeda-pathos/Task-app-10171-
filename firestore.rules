@@ -24,7 +24,7 @@ service cloud.firestore {
                     && isManager();
       allow update: if isSignedIn()
                     && request.auth.uid == memberId
-                    && onlyChanges(['displayName', 'theme', 'weeklyCapacity', 'photoURL', 'fcmToken', 'leaves']);
+                    && onlyChanges(['name', 'displayName', 'theme', 'weeklyCapacityHours', 'weeklyCapacity', 'photoURL', 'fcmToken', 'leaves']);
       allow delete: if isManager();
 
       match /notifications/{notifId} {
