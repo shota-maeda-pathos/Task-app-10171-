@@ -1,2 +1,0 @@
-﻿const fs=require('fs');let p='src/app/features/board/board.component.html',s=fs.readFileSync(p,'utf8');s=s.replace('今週の稼働 {{ myWorkingDays }}日','稼働 {{ myWorkingDays }}日').replace('今週の稼働 {{ otherWorkingDays }}日','稼働 {{ otherWorkingDays }}日');fs.writeFileSync(p,s);
-p='src/app/features/board/board.component.scss';s=fs.readFileSync(p,'utf8');s=s.replace('.member-detail {\n    font-size: 10.5px;', '.member-detail {\n    white-space: nowrap;\n    font-size: 10.5px;');fs.writeFileSync(p,s);

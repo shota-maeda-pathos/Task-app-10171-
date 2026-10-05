@@ -1,1 +1,0 @@
-﻿const fs=require('fs'),p='src/app/features/settings/settings.scss';let s=fs.readFileSync(p,'utf8');const old='    background: var(--card); color: var(--ink); font-size: 12px; max-width: none;';if(!s.includes(old))throw Error('Input styles missing');s=s.replace(old,old+'\n    &:focus { outline: none; border-color: var(--accent); }');fs.writeFileSync(p,s);
