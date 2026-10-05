@@ -115,9 +115,9 @@ export class DashboardComponent {
     this.router.navigate(['/board'], { queryParams: { taskId } });
   }
 
-  // 完了タスク一覧(実績時間があるもの・親タスクのみ)
+  // 完了タスク一覧(実績時間があるもの・親タスクのみ、アーカイブ含む)
   completedTasks = computed(() =>
-    this.tasksService.tasks().filter((t) => t.status === '完了' && t.actualHours !== null && t.parentId === null),
+    this.tasksService.tasks().filter((t) => (t.status === '完了' || t.status === 'アーカイブ済み') && t.actualHours !== null && t.parentId === null),
   );
 
   isCurrentUser(uid: string): boolean {
@@ -198,10 +198,19 @@ export class DashboardComponent {
   archivedTasks = computed(() =>
     this.tasksService.tasks().filter((t) => t.status === 'アーカイブ済み'),
   );
-  archiveCollapsed = false;
+  archiveDisplayLimit = signal(10);
+  displayedArchiveTasks = computed(() => this.archivedTasks().slice(0, this.archiveDisplayLimit()));
+  archiveCollapsed = (() => {
+    try { return localStorage.getItem('archiveCollapsed') === 'true'; } catch { return false; }
+  })();
   progressPct = computed(() =>
     this.totalTasks() > 0 ? Math.round((this.doneTasks() / this.totalTasks()) * 100) : 0,
   );
+
+  toggleArchiveCollapsed(): void {
+    this.archiveCollapsed = !this.archiveCollapsed;
+    try { localStorage.setItem('archiveCollapsed', String(this.archiveCollapsed)); } catch {}
+  }
 
   diffLabel(diff: number): string {
     if (diff > 0) return `+${diff}h 超過`;

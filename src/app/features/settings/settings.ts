@@ -217,6 +217,8 @@ export class SettingsComponent {
   // --- テンプレート ---
 
   templates = computed(() => this.tasksService.templates());
+  templateDisplayLimit = signal(10);
+  displayedTemplates = computed(() => this.templates().slice(0, this.templateDisplayLimit()));
 
   templateFormOpen = false;
   editingTemplate: TaskTemplate | null = null;
@@ -226,10 +228,16 @@ export class SettingsComponent {
   tplDescription = '';
   tplPriority: Priority | null = null;
   tplHours = 0;
+  tplAssigneeId: string | null = null;
   tplSubtasks: { title: string; estimatedHours: number }[] = [];
 
   priorityLabel(p: Priority): string {
     return { high: '高', medium: '中', low: '低' }[p];
+  }
+
+  memberName(uid: string | null): string {
+    if (!uid) return '';
+    return this.tasksService.members().find(m => m.uid === uid)?.name ?? '';
   }
 
   openAddTemplate(): void {
@@ -238,6 +246,7 @@ export class SettingsComponent {
     this.tplDescription = '';
     this.tplPriority = null;
     this.tplHours = 0;
+    this.tplAssigneeId = null;
     this.tplSubtasks = [];
     this.templateFormOpen = true;
   }
@@ -248,6 +257,7 @@ export class SettingsComponent {
     this.tplDescription = tpl.description;
     this.tplPriority = tpl.priority;
     this.tplHours = tpl.estimatedHours;
+    this.tplAssigneeId = tpl.assigneeId ?? null;
     this.tplSubtasks = tpl.subtasks.map(s => ({ ...s }));
     this.templateFormOpen = true;
   }
@@ -278,6 +288,7 @@ export class SettingsComponent {
       description: this.tplDescription.trim(),
       priority: this.tplPriority,
       estimatedHours: this.tplHours || 0,
+      assigneeId: this.tplAssigneeId,
       subtasks: this.tplSubtasks.filter(s => s.title.trim()),
       createdBy: uid,
     };

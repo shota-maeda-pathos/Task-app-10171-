@@ -827,6 +827,11 @@
     font-variant-numeric: tabular-nums;
 }
 
+.template-assignee {
+    font-size: 0.75rem;
+    color: var(--muted);
+}
+
 .template-actions {
     display: flex;
     gap: 6px;
@@ -1068,4 +1073,22 @@
 
 .required {
     color: #ef4444;
+}
+
+.show-more-btn {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    margin-top: 4px;
+    background: none;
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+
+    &:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+    }
 }

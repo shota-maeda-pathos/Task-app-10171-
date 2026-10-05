@@ -741,7 +741,12 @@ export class BoardComponent {
 
     // 担当者フィルター
     if (this.filterAssignee()) {
-      all = all.filter((t) => t.assigneeId === this.filterAssignee());
+      const assignee = this.filterAssignee();
+      const allTasks = this.tasksService.tasks();
+      all = all.filter((t) =>
+        t.assigneeId === assignee ||
+        allTasks.some((c) => c.parentId === t.id && c.assigneeId === assignee),
+      );
     }
 
     // 優先度フィルター
@@ -1163,7 +1168,7 @@ export class BoardComponent {
     this.newRootColumn = status;
     this.newRootTitle = tpl.title;
     this.newRootDescription = tpl.description || '';
-    this.newRootAssignee = null;
+    this.newRootAssignee = tpl.assigneeId ?? null;
     this.newRootHours = tpl.estimatedHours || 1;
     this.newRootDueDate = '';
     this.newRootPriority = tpl.priority;
@@ -1574,7 +1579,7 @@ export class BoardComponent {
     this.editingTask = task;
     this.editTaskTitle = task.title;
     this.editTaskAssignee = task.assigneeId;
-    this.editTaskHours = task.estimatedHours ?? 1;
+    this.editTaskHours = task.estimatedHours ?? 0;
     // 期限をdate input用の文字列に変換
     if (task.dueDate?.toDate) {
       const d = task.dueDate.toDate();
@@ -1683,12 +1688,12 @@ export class BoardComponent {
     }
   }
 
-  onEditEstimatedHoursChange(hours: number): void {
-    if (!Number.isFinite(hours)) return;
-    this.editTaskHours = hours;
+  onEditEstimatedHoursChange(hours: number | null): void {
+    const h = Number.isFinite(hours) ? hours! : 0;
+    this.editTaskHours = Math.max(0, h);
     this.editTaskFocusHours = Math.min(
       Math.max(0, this.editTaskFocusHours),
-      Math.max(0, hours),
+      this.editTaskHours,
     );
   }
 
@@ -1801,6 +1806,7 @@ export class BoardComponent {
       description: task.description ?? '',
       priority: task.priority,
       estimatedHours: task.estimatedHours,
+      assigneeId: task.assigneeId,
       subtasks,
       createdBy: uid,
     });
@@ -1990,7 +1996,13 @@ export class BoardComponent {
     const priorityMap: Record<string, string> = { high: '高', medium: '中', low: '低' };
 
     let filtered = tasks.filter((t) => t.parentId === null);
-    if (this.filterAssignee()) filtered = filtered.filter((t) => t.assigneeId === this.filterAssignee());
+    if (this.filterAssignee()) {
+      const assignee = this.filterAssignee();
+      filtered = filtered.filter((t) =>
+        t.assigneeId === assignee ||
+        tasks.some((c) => c.parentId === t.id && c.assigneeId === assignee),
+      );
+    }
     if (this.filterPriority()) filtered = filtered.filter((t) => t.priority === this.filterPriority());
     if (this.filterFocus()) filtered = filtered.filter((t) => t.focusThisWeek);
     const weekFilter = this.filterWeek();

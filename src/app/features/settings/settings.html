@@ -112,7 +112,7 @@
       よく使うタスクのひな形を登録して、Homeからワンクリックで作成できます。
     </p>
 
-    @for (tpl of templates(); track tpl.id) {
+    @for (tpl of displayedTemplates(); track tpl.id) {
       <div class="template-card">
         <div class="template-header">
           <div class="template-info">
@@ -124,6 +124,9 @@
             }
             @if (tpl.estimatedHours) {
               <span class="template-hours">{{ tpl.estimatedHours }}h</span>
+            }
+            @if (tpl.assigneeId) {
+              <span class="template-assignee">{{ memberName(tpl.assigneeId) }}</span>
             }
           </div>
           <div class="template-actions">
@@ -147,6 +150,10 @@
           </div>
         }
       </div>
+    }
+
+    @if (templates().length > templateDisplayLimit()) {
+      <button class="show-more-btn" (click)="templateDisplayLimit.update(v => v + 10)">もっと見る（残り {{ templates().length - templateDisplayLimit() }} 件）</button>
     }
 
     @if (templates().length === 0) {
@@ -336,6 +343,18 @@
         rows="2"
         placeholder="説明（任意）"
       ></textarea>
+
+      <div class="add-form-row">
+        <div class="add-form-field" style="flex: 1">
+          <label>担当者</label>
+          <select [(ngModel)]="tplAssigneeId">
+            <option [ngValue]="null">なし</option>
+            @for (m of tasksService.members(); track m.uid) {
+              <option [ngValue]="m.uid">{{ m.name }}</option>
+            }
+          </select>
+        </div>
+      </div>
 
       <div class="add-form-row">
         <div class="add-form-field">

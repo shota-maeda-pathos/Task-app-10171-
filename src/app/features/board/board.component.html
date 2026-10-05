@@ -1371,7 +1371,7 @@
                     <div class="add-form-field">
                       <label>見積もり</label>
                       <div class="input-with-unit">
-                        <input type="number" [(ngModel)]="newRootHours" min="0.5" step="0.5" />
+                        <input type="number" [(ngModel)]="newRootHours" min="0" step="0.5" />
                         <span class="unit">h</span>
                       </div>
                     </div>
@@ -2469,7 +2469,7 @@
           type="number"
           [ngModel]="editTaskHours"
           (ngModelChange)="onEditEstimatedHoursChange($event)"
-          min="0.5"
+          min="0"
           step="0.5"
           placeholder="予定"
           class="modal-input"

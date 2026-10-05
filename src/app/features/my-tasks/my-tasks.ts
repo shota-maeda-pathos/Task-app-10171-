@@ -47,6 +47,9 @@ export class MyTasksComponent {
   focusPopoverTop = signal(16);
   focusSaving = signal(false);
   focusSaveError = signal('');
+  activeDisplayLimit = signal(10);
+  completedDisplayLimit = signal(10);
+  displayedCompletedTasks = computed(() => this.myCompletedTasks().slice(0, this.completedDisplayLimit()));
   pendingFocusTask = computed(
     () => this.tasksService.tasks().find((t) => t.id === this.pendingFocusTaskId()) ?? null,
   );
@@ -211,7 +214,7 @@ export class MyTasksComponent {
 
     for (const task of this.rootTasks()) {
       if (
-        task.status !== '完了' ||
+        (task.status !== '完了' && task.status !== 'アーカイブ済み') ||
         task.estimatedHours <= 0 ||
         task.actualHours === null ||
         !Number.isFinite(task.actualHours) ||

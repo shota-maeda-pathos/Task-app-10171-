@@ -460,10 +460,8 @@
             CSV
           </button>
         }
-        <button class="archive-chevron-btn" type="button" (click)="archiveCollapsed = !archiveCollapsed">
-          <svg viewBox="0 0 24 24" [class.open]="!archiveCollapsed">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
+        <button class="load-toggle-btn" type="button" (click)="toggleArchiveCollapsed()">
+          <span class="load-toggle-arrow" [class.open]="!archiveCollapsed">▴</span>
         </button>
       </span>
     </h2>
@@ -473,7 +471,7 @@
         <p class="empty-note">アーカイブされたタスクはありません。</p>
       } @else {
         <div class="archive-card">
-          @for (task of archivedTasks(); track task.id) {
+          @for (task of displayedArchiveTasks(); track task.id) {
             <div class="archive-row">
               <span class="avatar" [style.background]="getMemberColor(task.assigneeId)">
                 {{ (getMemberName(task.assigneeId) || '未').charAt(0) }}
@@ -497,6 +495,11 @@
                 }
               </div>
             </div>
+          }
+          @if (archivedTasks().length > archiveDisplayLimit()) {
+            <button class="show-more-btn" (click)="archiveDisplayLimit.set(archiveDisplayLimit() + 10)">
+              もっと見る（残り{{ archivedTasks().length - archiveDisplayLimit() }}件）
+            </button>
           }
         </div>
       }

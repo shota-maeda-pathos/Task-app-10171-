@@ -821,29 +821,48 @@ export class TasksService {
   getMemberFocusHours(memberId: string): number {
     const tasks = this.tasks();
     let totalHours = 0;
+    const countedTaskIds = new Set<string>();
 
     for (const t of tasks) {
       if (t.status === '完了' || t.status === 'アーカイブ済み') continue;
       if (t.assigneeId !== memberId) continue;
       if (!t.focusThisWeek) continue;
 
+      countedTaskIds.add(t.id);
+
+      let hours = t.focusHours ?? t.estimatedHours ?? 0;
+      if (t.recurrence === 'daily') {
+        hours = (t.estimatedHours ?? 0) * 5;
+      }
+
       const children = tasks.filter((c) => c.parentId === t.id);
 
       if (children.length > 0) {
-        const focusedChildHours = children
+        const assignedChildHours = children
           .filter(
             (c) =>
               c.status !== '完了' &&
               c.status !== 'アーカイブ済み' &&
-              c.assigneeId !== null &&
-              c.focusThisWeek,
+              c.assigneeId !== null,
           )
-          .reduce((sum, c) => sum + (c.focusHours ?? c.estimatedHours ?? 0), 0);
-        const parentFocusHours = t.focusHours ?? t.estimatedHours ?? 0;
-        const remaining = Math.max(0, parentFocusHours - focusedChildHours);
+          .reduce((sum, c) => sum + (c.estimatedHours ?? 0), 0);
+        const remaining = Math.max(0, hours - assignedChildHours);
         totalHours += remaining;
       } else {
-        totalHours += t.focusHours ?? t.estimatedHours ?? 0;
+        totalHours += hours;
+      }
+    }
+
+    // 親タスクがフォーカス中の場合、その子タスクの時間も担当者に加算
+    for (const t of tasks) {
+      if (t.status === '完了' || t.status === 'アーカイブ済み') continue;
+      if (t.assigneeId !== memberId) continue;
+      if (!t.parentId) continue;
+      if (countedTaskIds.has(t.id)) continue;
+
+      const parent = tasks.find((p) => p.id === t.parentId);
+      if (parent && parent.focusThisWeek) {
+        totalHours += t.estimatedHours ?? 0;
       }
     }
 
@@ -938,6 +957,25 @@ export class TasksService {
             if (!weekIndices.some((wi) => wi.idx === w)) {
               weekIndices.push({ idx: w, hours: perOccurrence });
             }
+          }
+        }
+      }
+
+      if (weekIndices.length === 0 && t.parentId) {
+        const parent = tasks.find((p) => p.id === t.parentId);
+        if (parent) {
+          let parentIdx: number | null = null;
+          if (parent.focusThisWeek) {
+            parentIdx = 0;
+          } else {
+            parentIdx = parent.targetWeekStart
+              ? getWeekIndex(parent.targetWeekStart instanceof Timestamp ? parent.targetWeekStart.toDate() : new Date(parent.targetWeekStart))
+              : parent.dueDate
+                ? getWeekIndex(parent.dueDate instanceof Timestamp ? parent.dueDate.toDate() : new Date(parent.dueDate))
+                : null;
+          }
+          if (parentIdx !== null) {
+            weekIndices.push({ idx: Math.max(0, Math.min(parentIdx, 3)), hours: t.estimatedHours ?? 0 });
           }
         }
       }

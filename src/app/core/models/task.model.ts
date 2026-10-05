@@ -99,6 +99,7 @@ export interface TaskTemplate {
   description: string;
   priority: Priority | null;
   estimatedHours: number;
+  assigneeId: string | null;
   subtasks: { title: string; estimatedHours: number }[];
   createdBy: string;
   createdAt: Timestamp;

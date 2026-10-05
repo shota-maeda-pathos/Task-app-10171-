@@ -301,10 +301,15 @@
       @if (upcomingTasks().length > 0) {
         <div class="task-section">
           <h3 class="section-title">これから</h3>
-          @for (task of upcomingTasks(); track task.id) {
+          @for (task of upcomingTasks().slice(0, activeDisplayLimit()); track task.id) {
             <ng-container
               *ngTemplateOutlet="taskCard; context: { $implicit: task, urgency: '' }"
             ></ng-container>
+          }
+          @if (upcomingTasks().length > activeDisplayLimit()) {
+            <button class="show-more-btn" (click)="activeDisplayLimit.set(activeDisplayLimit() + 10)">
+              もっと見る（残り{{ upcomingTasks().length - activeDisplayLimit() }}件）
+            </button>
           }
         </div>
       }
@@ -312,18 +317,28 @@
       @if (noDueDateTasks().length > 0) {
         <div class="task-section">
           <h3 class="section-title muted">期限なし</h3>
-          @for (task of noDueDateTasks(); track task.id) {
+          @for (task of noDueDateTasks().slice(0, activeDisplayLimit()); track task.id) {
             <ng-container
               *ngTemplateOutlet="taskCard; context: { $implicit: task, urgency: '' }"
             ></ng-container>
           }
+          @if (noDueDateTasks().length > activeDisplayLimit()) {
+            <button class="show-more-btn" (click)="activeDisplayLimit.set(activeDisplayLimit() + 10)">
+              もっと見る（残り{{ noDueDateTasks().length - activeDisplayLimit() }}件）
+            </button>
+          }
         </div>
       }
     } @else {
-      @for (task of sortedActiveTasks(); track task.id) {
+      @for (task of sortedActiveTasks().slice(0, activeDisplayLimit()); track task.id) {
         <ng-container
           *ngTemplateOutlet="taskCard; context: { $implicit: task, urgency: getUrgency(task) }"
         ></ng-container>
+      }
+      @if (sortedActiveTasks().length > activeDisplayLimit()) {
+        <button class="show-more-btn" (click)="activeDisplayLimit.set(activeDisplayLimit() + 10)">
+          もっと見る（残り{{ sortedActiveTasks().length - activeDisplayLimit() }}件）
+        </button>
       }
     }
 
@@ -348,10 +363,15 @@
   }
 
   @if (tab() === 'completed') {
-    @for (task of myCompletedTasks(); track task.id) {
+    @for (task of displayedCompletedTasks(); track task.id) {
       <ng-container
         *ngTemplateOutlet="taskCard; context: { $implicit: task, urgency: '' }"
       ></ng-container>
+    }
+    @if (myCompletedTasks().length > completedDisplayLimit()) {
+      <button class="show-more-btn" (click)="completedDisplayLimit.set(completedDisplayLimit() + 10)">
+        もっと見る（残り{{ myCompletedTasks().length - completedDisplayLimit() }}件）
+      </button>
     }
     @if (myCompletedTasks().length === 0) {
       <div class="empty-state">
