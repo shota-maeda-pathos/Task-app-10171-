@@ -494,57 +494,37 @@
                     </div>
                   }
                   @if (addMemberLeaveTarget === member.uid) {
-                    <div class="member-leave-add-form">
-                      <input
-                        type="date"
-                        [(ngModel)]="memberLeaveStartDate"
-                        aria-label="開始日"
-                        class="holiday-date-input"
-                        (click)="$any($event.target).showPicker?.()"
-                      />
-                      <span class="date-separator">〜</span>
-                      <input
-                        type="date"
-                        [(ngModel)]="memberLeaveEndDate"
-                        aria-label="終了日（空欄なら開始日のみ）"
-                        class="holiday-date-input"
-                        (click)="$any($event.target).showPicker?.()"
-                      />
-                      <input
-                        type="text"
-                        [(ngModel)]="memberLeaveLabel"
-                        aria-label="休暇名"
-                        placeholder="有給"
-                        class="holiday-name-input"
-                      />
-<div class="leave-period-menu">
-  <button type="button" class="leave-period-control" aria-label="休暇区分" aria-haspopup="true" [attr.aria-expanded]="leavePeriodMenu() === member.uid" (click)="leavePeriodMenu.set(leavePeriodMenu() === member.uid ? null : member.uid)">{{ periodName(memberLeavePeriod) }} <span aria-hidden="true">▾</span></button>
-  @if (leavePeriodMenu() === member.uid) {
-    <div class="leave-period-options" role="group" aria-label="休暇区分の選択肢">
-      @for (option of leavePeriodOptions; track option.value) {
-        <button type="button" [class.selected]="memberLeavePeriod === option.value" [attr.aria-pressed]="memberLeavePeriod === option.value" (click)="selectLeavePeriod(member.uid, option.value)">{{ option.label }}</button>
-      }
+                    <div class="member-leave-add-form member-leave-panel">
+  <h4 class="member-leave-form-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18"/></svg>休暇を追加</h4>
+  <div class="member-leave-dates">
+    <label class="member-leave-field"><span>開始日 <small>必須</small></span><input type="date" [(ngModel)]="memberLeaveStartDate" aria-label="開始日" class="holiday-date-input" (click)="$any($event.target).showPicker?.()" /></label>
+    <span class="date-separator" aria-hidden="true">〜</span>
+    <label class="member-leave-field"><span>終了日</span><input type="date" [(ngModel)]="memberLeaveEndDate" aria-label="終了日（空欄なら開始日のみ）" class="holiday-date-input" (click)="$any($event.target).showPicker?.()" /></label>
+  </div>
+  <div class="member-leave-description">
+    <label class="member-leave-field"><span>休暇名</span><input type="text" [(ngModel)]="memberLeaveLabel" aria-label="休暇名" placeholder="有給" class="holiday-name-input" /></label>
+    <div class="member-leave-field"><span>取得単位</span>
+      <div class="leave-period-menu">
+        <button type="button" class="leave-period-control" aria-label="休暇区分" aria-haspopup="true" [attr.aria-expanded]="leavePeriodMenu() === member.uid" (click)="leavePeriodMenu.set(leavePeriodMenu() === member.uid ? null : member.uid)">{{ periodName(memberLeavePeriod) }} <span aria-hidden="true">▾</span></button>
+        @if (leavePeriodMenu() === member.uid) {
+          <div class="leave-period-options" role="group" aria-label="休暇区分の選択肢">
+            @for (option of leavePeriodOptions; track option.value) {
+              <button type="button" [class.selected]="memberLeavePeriod === option.value" [attr.aria-pressed]="memberLeavePeriod === option.value" (click)="selectLeavePeriod(member.uid, option.value)">{{ option.label }}</button>
+            }
+          </div>
+        }
+      </div>
     </div>
-  }
+  </div>
+  <p class="member-leave-form-hint">終了日が空欄の場合は開始日のみ登録します。半休は単日のみ選択できます。</p>
+  <div class="member-leave-form-footer">
+    <span>{{ memberLeaveStartDate ? '日付と取得単位を確認してください' : '期間を選択してください' }}</span>
+    <div class="member-leave-form-actions">
+      <button type="button" class="cancel-btn-sm" aria-label="休暇の追加をキャンセル" (click)="addMemberLeaveTarget = null; leavePeriodMenu.set(null)">キャンセル</button>
+      <button type="button" class="add-btn" [disabled]="!memberLeaveStartDate" (click)="addMemberLeave()">追加する</button>
+    </div>
+  </div>
 </div>
-                      <div class="member-leave-form-actions">
-                        <button
-                          class="add-btn"
-                          [disabled]="!memberLeaveStartDate"
-                          (click)="addMemberLeave()"
-                        >
-                          追加
-                        </button>
-                        <button
-                          type="button"
-                          class="cancel-btn-sm"
-                          aria-label="休暇の追加をキャンセル"
-                          (click)="addMemberLeaveTarget = null"
-                        >
-                          キャンセル
-                        </button>
-                      </div>
-                    </div>
                   } @else {
                     <button class="add-leave-btn" (click)="openAddMemberLeave(member.uid)">
                       ＋ 休暇を追加
@@ -632,57 +612,37 @@
                     </div>
                   }
                   @if (addMemberLeaveTarget === member.uid) {
-                    <div class="member-leave-add-form">
-                      <input
-                        type="date"
-                        [(ngModel)]="memberLeaveStartDate"
-                        aria-label="開始日"
-                        class="holiday-date-input"
-                        (click)="$any($event.target).showPicker?.()"
-                      />
-                      <span class="date-separator">〜</span>
-                      <input
-                        type="date"
-                        [(ngModel)]="memberLeaveEndDate"
-                        aria-label="終了日（空欄なら開始日のみ）"
-                        class="holiday-date-input"
-                        (click)="$any($event.target).showPicker?.()"
-                      />
-                      <input
-                        type="text"
-                        [(ngModel)]="memberLeaveLabel"
-                        aria-label="休暇名"
-                        placeholder="有給"
-                        class="holiday-name-input"
-                      />
-<div class="leave-period-menu">
-  <button type="button" class="leave-period-control" aria-label="休暇区分" aria-haspopup="true" [attr.aria-expanded]="leavePeriodMenu() === member.uid" (click)="leavePeriodMenu.set(leavePeriodMenu() === member.uid ? null : member.uid)">{{ periodName(memberLeavePeriod) }} <span aria-hidden="true">▾</span></button>
-  @if (leavePeriodMenu() === member.uid) {
-    <div class="leave-period-options" role="group" aria-label="休暇区分の選択肢">
-      @for (option of leavePeriodOptions; track option.value) {
-        <button type="button" [class.selected]="memberLeavePeriod === option.value" [attr.aria-pressed]="memberLeavePeriod === option.value" (click)="selectLeavePeriod(member.uid, option.value)">{{ option.label }}</button>
-      }
+                    <div class="member-leave-add-form member-leave-panel">
+  <h4 class="member-leave-form-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18"/></svg>休暇を追加</h4>
+  <div class="member-leave-dates">
+    <label class="member-leave-field"><span>開始日 <small>必須</small></span><input type="date" [(ngModel)]="memberLeaveStartDate" aria-label="開始日" class="holiday-date-input" (click)="$any($event.target).showPicker?.()" /></label>
+    <span class="date-separator" aria-hidden="true">〜</span>
+    <label class="member-leave-field"><span>終了日</span><input type="date" [(ngModel)]="memberLeaveEndDate" aria-label="終了日（空欄なら開始日のみ）" class="holiday-date-input" (click)="$any($event.target).showPicker?.()" /></label>
+  </div>
+  <div class="member-leave-description">
+    <label class="member-leave-field"><span>休暇名</span><input type="text" [(ngModel)]="memberLeaveLabel" aria-label="休暇名" placeholder="有給" class="holiday-name-input" /></label>
+    <div class="member-leave-field"><span>取得単位</span>
+      <div class="leave-period-menu">
+        <button type="button" class="leave-period-control" aria-label="休暇区分" aria-haspopup="true" [attr.aria-expanded]="leavePeriodMenu() === member.uid" (click)="leavePeriodMenu.set(leavePeriodMenu() === member.uid ? null : member.uid)">{{ periodName(memberLeavePeriod) }} <span aria-hidden="true">▾</span></button>
+        @if (leavePeriodMenu() === member.uid) {
+          <div class="leave-period-options" role="group" aria-label="休暇区分の選択肢">
+            @for (option of leavePeriodOptions; track option.value) {
+              <button type="button" [class.selected]="memberLeavePeriod === option.value" [attr.aria-pressed]="memberLeavePeriod === option.value" (click)="selectLeavePeriod(member.uid, option.value)">{{ option.label }}</button>
+            }
+          </div>
+        }
+      </div>
     </div>
-  }
+  </div>
+  <p class="member-leave-form-hint">終了日が空欄の場合は開始日のみ登録します。半休は単日のみ選択できます。</p>
+  <div class="member-leave-form-footer">
+    <span>{{ memberLeaveStartDate ? '日付と取得単位を確認してください' : '期間を選択してください' }}</span>
+    <div class="member-leave-form-actions">
+      <button type="button" class="cancel-btn-sm" aria-label="休暇の追加をキャンセル" (click)="addMemberLeaveTarget = null; leavePeriodMenu.set(null)">キャンセル</button>
+      <button type="button" class="add-btn" [disabled]="!memberLeaveStartDate" (click)="addMemberLeave()">追加する</button>
+    </div>
+  </div>
 </div>
-                      <div class="member-leave-form-actions">
-                        <button
-                          class="add-btn"
-                          [disabled]="!memberLeaveStartDate"
-                          (click)="addMemberLeave()"
-                        >
-                          追加
-                        </button>
-                        <button
-                          type="button"
-                          class="cancel-btn-sm"
-                          aria-label="休暇の追加をキャンセル"
-                          (click)="addMemberLeaveTarget = null"
-                        >
-                          キャンセル
-                        </button>
-                      </div>
-                    </div>
                   } @else {
                     <button class="add-leave-btn" (click)="openAddMemberLeave(member.uid)">
                       ＋ 休暇を追加
@@ -694,6 +654,21 @@
           </div>
         }
       </div>
+
+      @if (disabledMembers().length > 0) {
+        <div class="disabled-members-section">
+          <h3 class="disabled-members-title">削除済みメンバー</h3>
+          @for (member of disabledMembers(); track member.uid) {
+            <div class="disabled-member-row">
+              <span class="avatar" [style.background]="member.avatarColor">{{
+                member.name.charAt(0)
+              }}</span>
+              <span class="disabled-member-name">{{ member.name }}</span>
+              <button class="restore-btn" (click)="restoreMember(member)">復帰</button>
+            </div>
+          }
+        </div>
+      }
     </div>
   }
 </div>
@@ -725,21 +700,12 @@
         <input
           type="text"
           #editNameInput
+          class="edit-member-name-input"
           [value]="editingMember.name"
           [disabled]="isCurrentUser(editingMember.uid)"
-          style="
-            width: 100%;
-            box-sizing: border-box;
-            padding: 10px 12px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            font-size: 14px;
-            margin-top: 8px;
-          "
         />
-        <!-- 自分が対象の場合は案内メッセージを表示 -->
         @if (isCurrentUser(editingMember.uid)) {
-          <div style="font-size: 11.5px; color: var(--muted); margin-top: 6px">
+          <div class="edit-member-hint">
             ※自分の名前は上部のプロフィールセクションで変更してください。
           </div>
         }

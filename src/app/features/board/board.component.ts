@@ -743,10 +743,14 @@ export class BoardComponent {
     if (this.filterAssignee()) {
       const assignee = this.filterAssignee();
       const allTasks = this.tasksService.tasks();
-      all = all.filter((t) =>
-        t.assigneeId === assignee ||
-        allTasks.some((c) => c.parentId === t.id && c.assigneeId === assignee),
-      );
+      if (assignee === 'unassigned') {
+        all = all.filter((t) => !t.assigneeId);
+      } else {
+        all = all.filter((t) =>
+          t.assigneeId === assignee ||
+          allTasks.some((c) => c.parentId === t.id && c.assigneeId === assignee),
+        );
+      }
     }
 
     // 優先度フィルター
@@ -2003,10 +2007,14 @@ export class BoardComponent {
     let filtered = tasks.filter((t) => t.parentId === null);
     if (this.filterAssignee()) {
       const assignee = this.filterAssignee();
-      filtered = filtered.filter((t) =>
-        t.assigneeId === assignee ||
-        tasks.some((c) => c.parentId === t.id && c.assigneeId === assignee),
-      );
+      if (assignee === 'unassigned') {
+        filtered = filtered.filter((t) => !t.assigneeId);
+      } else {
+        filtered = filtered.filter((t) =>
+          t.assigneeId === assignee ||
+          tasks.some((c) => c.parentId === t.id && c.assigneeId === assignee),
+        );
+      }
     }
     if (this.filterPriority()) filtered = filtered.filter((t) => t.priority === this.filterPriority());
     if (this.filterFocus()) filtered = filtered.filter((t) => t.focusThisWeek);

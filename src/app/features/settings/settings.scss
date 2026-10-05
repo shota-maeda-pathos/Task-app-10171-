@@ -220,6 +220,56 @@
     margin: 0 0 8px;
 }
 
+.disabled-members-section {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--line);
+}
+
+.disabled-members-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    margin: 0 0 10px;
+}
+
+.disabled-member-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    opacity: 0.7;
+
+    & + & {
+        margin-top: 6px;
+    }
+
+    .disabled-member-name {
+        flex: 1;
+        font-size: 13px;
+        color: var(--fg);
+    }
+
+    .restore-btn {
+        background: none;
+        border: 1px solid var(--accent);
+        color: var(--accent);
+        padding: 5px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        cursor: pointer;
+        font-family: inherit;
+
+        &:hover {
+            background: var(--accent);
+            color: #fff;
+        }
+    }
+}
+
 .modal-overlay {
     position: fixed;
     inset: 0;
@@ -241,7 +291,7 @@
     h3 {
         font-size: 16px;
         font-weight: 600;
-        margin: 0 0 24px;
+        margin: 0 0 16px;
     }
 }
 
@@ -255,6 +305,24 @@
         display: block;
         margin-bottom: 8px;
     }
+}
+
+.edit-member-name-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 14px;
+    margin-top: 8px;
+    background: var(--card);
+    color: var(--fg);
+}
+
+.edit-member-hint {
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-top: 6px;
 }
 
 .role-select {
@@ -285,7 +353,7 @@
         }
 
         &:hover:not(.active) {
-            color: #333;
+            color: var(--fg);
         }
     }
 }
@@ -309,6 +377,8 @@
         font-size: 16px;
         text-align: center;
         font-family: inherit;
+        background: var(--card);
+        color: var(--ink);
 
         &:focus {
             outline: none;
@@ -817,9 +887,9 @@
     border-radius: 4px;
     white-space: nowrap;
 
-    &.priority-high { background: #fce4ec; color: #c62828; }
-    &.priority-medium { background: #fff3e0; color: #e65100; }
-    &.priority-low { background: #e8f5e9; color: #2e7d32; }
+    &.priority-high { background: rgba(var(--danger-rgb), 0.08); color: var(--danger); }
+    &.priority-medium { background: rgba(var(--warn-rgb), 0.08); color: var(--warn); }
+    &.priority-low { background: rgba(var(--ok-rgb), 0.08); color: var(--ok); }
 }
 
 .template-hours {
@@ -1053,8 +1123,8 @@
     flex-shrink: 0;
 
     &:hover {
-        color: #ef4444;
-        border-color: #ef4444;
+        color: var(--danger);
+        border-color: var(--danger);
     }
 }
 
@@ -1077,36 +1147,6 @@
 }
 
 // --- 祝日・休暇 ---
-
-.subsection-title {
-    font-size: 14px;
-    font-weight: 600;
-    margin: 0 0 8px;
-    color: var(--fg);
-}
-
-.holiday-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--line);
-    font-size: 13px;
-
-    .holiday-date {
-        min-width: 90px;
-        color: var(--muted);
-        font-variant-numeric: tabular-nums;
-    }
-
-    .holiday-name {
-        flex: 1;
-    }
-
-    .delete-btn {
-        flex-shrink: 0;
-    }
-}
 
 .holiday-add-form {
     display: flex;
@@ -1186,34 +1226,6 @@
     }
 }
 
-.member-leave-section {
-    margin-bottom: 16px;
-    padding: 10px 12px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-}
-
-.member-leave-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    margin-bottom: 8px;
-
-    .avatar.small {
-        width: 24px;
-        height: 24px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #fff;
-        font-size: 11px;
-        font-weight: 700;
-    }
-}
-
 .member-leaves {
     width: 100%;
     padding: 4px 0 4px 48px;
@@ -1232,7 +1244,7 @@
         }
 
         .leave-label {
-            color: var(--text);
+            color: var(--fg);
         }
 
         .leave-remove-btn {
@@ -1252,17 +1264,28 @@
 
     .member-leave-add-form {
         display: flex;
-        align-items: center;
-        gap: 6px;
-        margin-top: 4px;
-        flex-wrap: wrap;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 8px;
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--bg);
+
+        .leave-form-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
 
         .holiday-date-input {
-            font-size: 12px;
-            padding: 4px 6px;
-            max-width: 130px;
+            flex: 1;
+            min-width: 120px;
+            font-size: 13px;
+            padding: 8px 10px;
             border: 1px solid var(--line);
-            border-radius: 6px;
+            border-radius: 7px;
             background: var(--card);
             color: var(--fg);
             color-scheme: light dark;
@@ -1270,34 +1293,54 @@
         }
 
         .holiday-name-input {
-            font-size: 12px;
-            padding: 4px 6px;
-            max-width: 80px;
+            flex: 1;
+            min-width: 70px;
+            font-size: 13px;
+            padding: 8px 10px;
             border: 1px solid var(--line);
-            border-radius: 6px;
+            border-radius: 7px;
             background: var(--card);
             color: var(--fg);
         }
 
         .date-separator {
-            font-size: 12px;
+            font-size: 13px;
             color: var(--muted);
+            flex-shrink: 0;
         }
 
         .add-btn {
-            font-size: 12px;
-            padding: 4px 10px;
+            font-size: 13px;
+            padding: 7px 16px;
+            white-space: nowrap;
+            border: none;
+            border-radius: 7px;
+            background: var(--accent);
+            color: #fff;
+            cursor: pointer;
+
+            &:disabled {
+                opacity: 0.4;
+                cursor: default;
+            }
+
+            &:hover:not(:disabled) {
+                opacity: 0.85;
+            }
         }
 
         .cancel-btn-sm {
             background: none;
-            border: none;
+            border: 1px solid var(--line);
+            border-radius: 7px;
             color: var(--muted);
             cursor: pointer;
             font-size: 13px;
-            padding: 2px 4px;
+            padding: 7px 12px;
+            white-space: nowrap;
 
             &:hover {
+                border-color: var(--danger);
                 color: var(--danger);
             }
         }
@@ -1307,7 +1350,7 @@
         background: none;
         border: none;
         color: var(--muted);
-        font-size: 12px;
+        font-size: 11px;
         cursor: pointer;
         padding: 4px 0;
         margin-top: 2px;
@@ -1462,25 +1505,7 @@
       .leave-remove-btn { min-width: 28px; min-height: 28px; }
     }
     .member-leave-add-form {
-      width: 100%; margin-top: 0; gap: 6px; flex-wrap: nowrap;
-      .holiday-date-input { flex: 1 1 110px; width: 110px; }
-      .holiday-name-input { flex: 1 1 64px; width: 64px; }
-      input { min-height: 30px; height: 30px; padding: 5px 8px; }
-      .member-leave-form-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
-      .add-btn, .cancel-btn-sm {
-        min-height: 30px; padding: 5px 10px; border-radius: 7px;
-        border: 1px solid var(--line); font: inherit; font-size: 12px;
-        line-height: 18px; white-space: nowrap; cursor: pointer;
-      }
-      .add-btn {
-        background: var(--accent); border-color: var(--accent); color: #fff;
-        &:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
-        &:disabled { opacity: .4; cursor: default; }
-      }
-      .cancel-btn-sm {
-        background: var(--card); color: var(--muted);
-        &:hover { border-color: var(--accent); color: var(--accent); }
-      }
+      width: 100%; margin-top: 6px; padding: 10px 12px;
     }
     .add-leave-btn { flex-basis: 100%; color: var(--accent); text-align: left; }
 
@@ -1490,9 +1515,14 @@
   .leave-card { padding: 16px; }
   .member-settings .member-row { padding: 10px 16px; }
   .leave-entry { gap: 8px; }
-  .leave-settings .holiday-add-form, .member-settings .member-leave-add-form {
+  .leave-settings .holiday-add-form {
     .holiday-date-input, .holiday-name-input { flex: 1 1 100%; width: 100%; }
     .date-separator { display: none; }
+  }
+  .member-settings .member-leave-add-form {
+    .leave-form-row { gap: 6px; }
+    .holiday-date-input { min-width: 0; }
+    .holiday-name-input { min-width: 0; }
   }
   .member-settings {
     .member-info { flex: 1 1 120px; }
@@ -1537,3 +1567,32 @@
 
 .leave-settings .holiday-add-form .leave-period-control { height: 38px; min-height: 38px; padding: 8px 10px; }
 .member-settings .member-leave-add-form .leave-period-control { height: 30px; min-height: 30px; padding: 5px 8px; }
+
+/* メンバーの休暇追加フォーム */
+.member-settings .member-leaves .member-leave-add-form.member-leave-panel {
+  display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 18px;
+  border: 1px solid rgba(var(--accent-rgb), .18); border-radius: 9px; background: rgba(var(--accent-rgb), .035);
+  .member-leave-form-title { display: flex; align-items: center; gap: 8px; margin: 0 0 18px; font-size: 13px; font-weight: 600; color: var(--ink); }
+  .member-leave-form-title svg { width: 16px; height: 16px; color: var(--muted); }
+  .member-leave-dates { display: grid; grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr); gap: 12px; align-items: end; }
+  .date-separator { display: block; padding-bottom: 11px; text-align: center; color: var(--muted); }
+  .member-leave-description { display: grid; grid-template-columns: minmax(0, 1fr) 140px; gap: 12px; margin-top: 14px; }
+  .member-leave-field { display: flex; flex-direction: column; min-width: 0; gap: 7px; font-size: 12px; color: var(--ink); }
+  .member-leave-field small { margin-left: 4px; font-size: 10px; color: var(--muted); }
+  input, .leave-period-control { flex: 0 0 auto; width: 100%; min-height: 40px; height: 40px; max-height: 40px; padding: 9px 12px; box-sizing: border-box; font-size: 13px; background: var(--card); border: 1px solid var(--line); border-radius: 7px; color: var(--ink); }
+  input:focus, .leave-period-control:focus-visible { outline: none; border-color: var(--accent); }
+  .leave-period-control { justify-content: space-between; }
+  .member-leave-form-hint { margin: 7px 0 0; font-size: 11px; color: var(--muted); line-height: 1.6; }
+  .member-leave-form-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .member-leave-form-footer > span { font-size: 11px; color: var(--muted); }
+  .member-leave-form-actions { display: flex; gap: 8px; margin-left: auto; }
+  .add-btn, .cancel-btn-sm { min-height: 38px; padding: 8px 12px; font-size: 13px; }
+}
+@media (max-width: 480px) {
+  .member-settings .member-leaves .member-leave-add-form.member-leave-panel {
+    padding: 14px;
+    .member-leave-dates { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+    .date-separator { display: none; }
+    .member-leave-description { grid-template-columns: minmax(0, 1fr); }
+  }
+}

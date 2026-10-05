@@ -724,7 +724,7 @@
     border-bottom: 1px solid var(--line);
 
     &.sun { color: var(--danger); }
-    &.sat { color: #2563eb; }
+    &.sat { color: var(--sat); }
 }
 
 .cal-cell {
@@ -753,9 +753,9 @@
 
     .today & { color: var(--accent); font-weight: 700; }
     .sun & { color: var(--danger); }
-    .sat & { color: #2563eb; }
+    .sat & { color: var(--sat); }
     .today.sun & { color: var(--danger); font-weight: 700; }
-    .today.sat & { color: #2563eb; font-weight: 700; }
+    .today.sat & { color: var(--sat); font-weight: 700; }
 }
 
 .cal-task {
@@ -1167,7 +1167,7 @@
     h3 {
         font-size: 1rem;
         font-weight: 600;
-        margin: 0 0 24px;
+        margin: 0 0 16px;
     }
 }
 
@@ -1414,6 +1414,7 @@
     border-radius: 8px;
     color: var(--muted);
     font-size: 13px;
+    font-family: inherit;
     cursor: pointer;
 
     &:hover {

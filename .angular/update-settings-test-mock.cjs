@@ -1,0 +1,1 @@
+﻿const fs=require('fs'),p='src/app/features/settings/settings.spec.ts';let s=fs.readFileSync(p,'utf8');s=s.replace('tasks = { members:', 'tasks = { disabledMembers: signal([]), members:');fs.writeFileSync(p,s);

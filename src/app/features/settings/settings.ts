@@ -178,12 +178,23 @@ export class SettingsComponent {
     this.deletingMember = null;
   }
 
-  // クラス内のプロパティとして以下を追加します
+  disabledMembers = computed(() => this.tasksService.disabledMembers());
+
+  async restoreMember(member: Member): Promise<void> {
+    try {
+      await this.tasksService.restoreMember(member.uid);
+      this.notificationService.show('復帰完了', `${member.name}さんを復帰しました`);
+    } catch (e) {
+      console.error('メンバー復帰エラー:', e);
+      this.notificationService.show('エラー', 'メンバーの復帰に失敗しました');
+    }
+  }
+
   myProfile = computed(() =>
     this.tasksService.members().find((m) => m.uid === this.auth.currentUser()?.uid),
   );
 
-  // クラス内のメソッドとして以下を追加します
+
   async updateName(newName: string): Promise<void> {
     const uid = this.auth.currentUser()?.uid;
     if (!uid) return;

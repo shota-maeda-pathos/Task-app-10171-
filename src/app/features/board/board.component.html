@@ -387,6 +387,7 @@
                 @for (m of sortedMembers(); track m.uid) {
                   <option [ngValue]="m.uid">{{ m.name }}</option>
                 }
+                <option ngValue="unassigned">未割当</option>
               </select>
 
               <label class="filter-label" for="filter-priority">優先度</label>
@@ -440,10 +441,10 @@
         <div class="active-chips">
           @if (filterAssignee(); as assigneeId) {
             <span class="active-chip">
-              担当: {{ getMemberName(assigneeId) }}
+              担当: {{ assigneeId === 'unassigned' ? '未割当' : getMemberName(assigneeId) }}
               <button
                 type="button"
-                [attr.aria-label]="getMemberName(assigneeId) + 'の担当者フィルターを解除'"
+                aria-label="担当者フィルターを解除"
                 (click)="filterAssignee.set(null)"
               >
                 ✕

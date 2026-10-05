@@ -41,6 +41,7 @@ export class MyTasksComponent {
   sortKey = signal<SortKey>('default');
   searchQuery = signal('');
   filterFocus = signal(false);
+  filterAssignee = signal<string>('');
   pendingFocusTaskId = signal<string | null>(null);
   focusHoursDraft = signal<number | null>(null);
   @ViewChild('focusPopover', { static: true }) private focusPopover!: ElementRef<HTMLFormElement>;
@@ -112,9 +113,15 @@ export class MyTasksComponent {
   myTasks = computed(() => {
     const uid = this.auth.currentUser()?.uid;
     if (!uid) return [];
+    const assigneeFilter = this.filterAssignee();
     return this.tasksService
       .tasks()
-      .filter((t) => t.assigneeId === uid && t.status !== 'アーカイブ済み');
+      .filter((t) => {
+        if (t.status === 'アーカイブ済み') return false;
+        if (assigneeFilter === 'unassigned') return !t.assigneeId;
+        if (assigneeFilter) return t.assigneeId === assigneeFilter;
+        return t.assigneeId === uid;
+      });
   });
 
   rootTasks = computed(() => {

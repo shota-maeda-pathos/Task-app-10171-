@@ -64,6 +64,7 @@ export interface Member {
   avatarColor: string;
   theme?: string;
   leaves?: MemberLeave[];
+  disabled?: boolean;
 }
 
 export interface TaskComment {

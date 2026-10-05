@@ -11,7 +11,7 @@ describe('Settings UI interactions', () => {
   let fixture: ReturnType<typeof TestBed.createComponent<SettingsComponent>>;
   let tasks: any;
   beforeEach(async () => {
-    tasks = { members: signal([member('self'), member('other')]), teamSettings: signal({ holidays: [{ date: '2026-10-12', name: '休日' }] }), templates: signal([]), getFocusLoadPercent: () => 0, addHoliday: vi.fn().mockResolvedValue(undefined), addLeave: vi.fn().mockResolvedValue(undefined), removeHoliday: vi.fn().mockResolvedValue(undefined), removeLeave: vi.fn().mockResolvedValue(undefined) };
+    tasks = { disabledMembers: signal([]), members: signal([member('self'), member('other')]), teamSettings: signal({ holidays: [{ date: '2026-10-12', name: '休日' }] }), templates: signal([]), getFocusLoadPercent: () => 0, addHoliday: vi.fn().mockResolvedValue(undefined), addLeave: vi.fn().mockResolvedValue(undefined), removeHoliday: vi.fn().mockResolvedValue(undefined), removeLeave: vi.fn().mockResolvedValue(undefined) };
     await TestBed.configureTestingModule({ imports: [SettingsComponent], providers: [
       { provide: TasksService, useValue: tasks },
       { provide: AuthService, useValue: { currentUser: signal({ uid: 'self' }) } },

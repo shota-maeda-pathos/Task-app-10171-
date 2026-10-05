@@ -184,6 +184,20 @@
       </button>
     </div>
 
+    <select
+      class="assignee-filter"
+      [value]="filterAssignee()"
+      (change)="filterAssignee.set($any($event.target).value)"
+    >
+      <option value="">自分</option>
+      @for (m of tasksService.members(); track m.uid) {
+        @if (m.uid !== auth.currentUser()?.uid) {
+          <option [value]="m.uid">{{ m.name }}</option>
+        }
+      }
+      <option value="unassigned">未割当</option>
+    </select>
+
     <label class="focus-filter-check" (click)="$event.stopPropagation()">
       <input
         type="checkbox"

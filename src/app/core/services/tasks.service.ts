@@ -20,6 +20,7 @@ import {
   getDoc,
   writeBatch,
   runTransaction,
+  deleteField,
   Timestamp,
 } from 'firebase/firestore';
 import {
@@ -111,7 +112,7 @@ export class TasksService {
     }
   }
 
-  members = toSignal(
+  private allMembers = toSignal(
     user(this.auth).pipe(
       switchMap((currentUser) => {
         if (!currentUser) return of([]);
@@ -122,6 +123,10 @@ export class TasksService {
     ) as Observable<Member[]>,
     { initialValue: [] as Member[] },
   );
+
+  members = computed(() => this.allMembers().filter((m) => !m.disabled));
+
+  disabledMembers = computed(() => this.allMembers().filter((m) => m.disabled));
 
   teamSettings = toSignal(
     user(this.auth).pipe(
@@ -611,6 +616,11 @@ export class TasksService {
     // メンバーを無効化（再ログイン防止のためドキュメントは残す）
     const ref = doc(this.firestore, 'members', memberId);
     await updateDoc(ref, { disabled: true });
+  }
+
+  async restoreMember(memberId: string): Promise<void> {
+    const ref = doc(this.firestore, 'members', memberId);
+    await updateDoc(ref, { disabled: deleteField() });
   }
 
   // --- 差し戻し/交渉フロー ---

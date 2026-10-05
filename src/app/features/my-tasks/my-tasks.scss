@@ -421,7 +421,7 @@
   }
 
   &.sat {
-    color: #2563eb;
+    color: var(--sat);
   }
 }
 
@@ -466,7 +466,7 @@
   }
 
   .sat & {
-    color: #2563eb;
+    color: var(--sat);
   }
 
   .today.sun & {
@@ -475,7 +475,7 @@
   }
 
   .today.sat & {
-    color: #2563eb;
+    color: var(--sat);
     font-weight: 700;
   }
 }
@@ -506,6 +506,22 @@
   padding-bottom: 16px;
   border-bottom: 1px solid var(--line);
   flex-wrap: wrap;
+}
+
+.assignee-filter {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-family: inherit;
+  cursor: pointer;
+
+  &:focus {
+    border-color: var(--accent);
+    outline: none;
+  }
 }
 
 .search-wrap {
@@ -1473,7 +1489,7 @@
 .modal-title {
   font-size: 1rem;
   font-weight: 700;
-  margin: 0 0 6px;
+  margin: 0 0 16px;
   color: var(--ink);
 }
 
