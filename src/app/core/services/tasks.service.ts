@@ -166,7 +166,8 @@ export class TasksService {
   }
 
   async createTask(data: Partial<Task>): Promise<string> {
-    const estimatedHours = data.estimatedHours ?? 0;
+    const rawHours = data.estimatedHours ?? 0;
+    const estimatedHours = Number.isFinite(rawHours) && rawHours >= 0 ? rawHours : 0;
     const focusThisWeek = data.focusThisWeek ?? false;
     const docRef = await addDoc(this.tasksCollection, {
       title: data.title ?? '',
@@ -244,13 +245,22 @@ export class TasksService {
 
     const childrenQuery = query(this.tasksCollection, where('parentId', '==', parentId));
     const childrenSnap = await getDocs(childrenQuery);
-    const childTotal = childrenSnap.docs.reduce(
-      (sum, d) => sum + ((d.data() as Task).estimatedHours ?? 0),
-      0,
-    );
+    const childTotal = childrenSnap.docs
+      .filter((d) => {
+        const s = (d.data() as Task).status;
+        return s !== '完了' && s !== 'アーカイブ済み';
+      })
+      .reduce((sum, d) => sum + ((d.data() as Task).estimatedHours ?? 0), 0);
 
+    const updates: Record<string, any> = {};
     if (childTotal !== (parentData.estimatedHours ?? 0)) {
-      await updateDoc(parentRef, { estimatedHours: childTotal });
+      updates['estimatedHours'] = childTotal;
+    }
+    if ((parentData.focusHours ?? 0) > childTotal && childTotal > 0) {
+      updates['focusHours'] = childTotal;
+    }
+    if (Object.keys(updates).length > 0) {
+      await updateDoc(parentRef, updates);
     }
   }
 
@@ -422,12 +432,13 @@ export class TasksService {
   }
 
   async completeTask(taskId: string, actualHours: number): Promise<void> {
+    const safeHours = Number.isFinite(actualHours) && actualHours >= 0 ? actualHours : 0;
     const task = this.tasks().find((t) => t.id === taskId);
     const oldStatus = task?.status ?? null;
     const ref = doc(this.firestore, 'tasks', taskId);
     await updateDoc(ref, {
       status: '完了',
-      actualHours,
+      actualHours: safeHours,
       statusUpdatedAt: serverTimestamp(),
     });
     // アクティビティログ
@@ -481,8 +492,19 @@ export class TasksService {
   }
 
   private async deleteTaskSubcollections(taskId: string): Promise<void> {
-    const subcollections = ['comments', 'activities', 'attachments'];
-    for (const sub of subcollections) {
+    const attachCol = collection(this.firestore, 'tasks', taskId, 'attachments');
+    const attachSnap = await getDocs(attachCol);
+    for (const d of attachSnap.docs) {
+      const data = d.data();
+      if (data['storagePath']) {
+        try {
+          await deleteObject(storageRef(this.storage, data['storagePath']));
+        } catch (_) { /* ファイルが既に存在しない場合は無視 */ }
+      }
+      await deleteDoc(d.ref);
+    }
+
+    for (const sub of ['comments', 'activities']) {
       const col = collection(this.firestore, 'tasks', taskId, sub);
       const snap = await getDocs(col);
       for (const d of snap.docs) {
@@ -565,9 +587,9 @@ export class TasksService {
     notifSnap.docs.forEach((d) => notifBatch.delete(d.ref));
     await notifBatch.commit();
 
-    // メンバードキュメントを削除
+    // メンバーを無効化（再ログイン防止のためドキュメントは残す）
     const ref = doc(this.firestore, 'members', memberId);
-    await deleteDoc(ref);
+    await updateDoc(ref, { disabled: true });
   }
 
   // --- 差し戻し/交渉フロー ---
@@ -898,11 +920,24 @@ export class TasksService {
       }
 
       if (t.recurrence) {
-        const baseWeek = weekIndices.length > 0 ? Math.min(...weekIndices.map((w) => w.idx)) : 0;
-        const step = t.recurrence === 'daily' ? 1 : t.recurrence === 'weekly' ? 1 : t.recurrence === 'biweekly' ? 2 : 4;
-        for (let w = baseWeek + step; w <= 3; w += step) {
-          if (!weekIndices.some((wi) => wi.idx === w)) {
-            weekIndices.push({ idx: w, hours: t.estimatedHours ?? 0 });
+        const perOccurrence = t.estimatedHours ?? 0;
+        if (t.recurrence === 'daily') {
+          const weeklyTotal = perOccurrence * 5;
+          for (let w = 0; w <= 3; w++) {
+            const existing = weekIndices.find((wi) => wi.idx === w);
+            if (existing) {
+              existing.hours = weeklyTotal;
+            } else {
+              weekIndices.push({ idx: w, hours: weeklyTotal });
+            }
+          }
+        } else {
+          const baseWeek = weekIndices.length > 0 ? Math.min(...weekIndices.map((w) => w.idx)) : 0;
+          const step = t.recurrence === 'weekly' ? 1 : t.recurrence === 'biweekly' ? 2 : 4;
+          for (let w = baseWeek + step; w <= 3; w += step) {
+            if (!weekIndices.some((wi) => wi.idx === w)) {
+              weekIndices.push({ idx: w, hours: perOccurrence });
+            }
           }
         }
       }
@@ -1189,14 +1224,50 @@ export class TasksService {
     const snap = await getDoc(docRef);
     const data = snap.data();
     if (data?.['storagePath']) {
-      try {
-        const fileRef = storageRef(this.storage, data['storagePath']);
-        await deleteObject(fileRef);
-      } catch (e) {
-        console.warn('Storage削除エラー:', e);
-      }
+      const fileRef = storageRef(this.storage, data['storagePath']);
+      await deleteObject(fileRef);
     }
     await deleteDoc(docRef);
+  }
+
+  // --- 繰り返しタスク生成 ---
+
+  async spawnRecurrence(task: Task): Promise<void> {
+    if (!task.recurrence) return;
+    const nextDue = this.calcNextDueDate(task.dueDate?.toDate() ?? new Date(), task.recurrence);
+    await this.createTask({
+      title: task.title,
+      description: task.description ?? '',
+      parentId: task.parentId,
+      assigneeId: task.assigneeId,
+      createdBy: task.createdBy,
+      estimatedHours: task.estimatedHours,
+      dueDate: Timestamp.fromDate(nextDue),
+      status: '未着手',
+      priority: task.priority,
+      focusThisWeek: false,
+      focusHours: null,
+      targetWeekStart: Timestamp.fromDate(getWeekMonday(nextDue)),
+      recurrence: task.recurrence,
+      recurrenceSourceId: task.recurrenceSourceId ?? task.id,
+    });
+  }
+
+  private calcNextDueDate(base: Date, type: RecurrenceType): Date {
+    const d = new Date(base);
+    switch (type) {
+      case 'daily': d.setDate(d.getDate() + 1); break;
+      case 'weekly': d.setDate(d.getDate() + 7); break;
+      case 'biweekly': d.setDate(d.getDate() + 14); break;
+      case 'monthly': {
+        const originalDay = base.getDate();
+        d.setMonth(d.getMonth() + 1, 1);
+        const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+        d.setDate(Math.min(originalDay, lastDay));
+        break;
+      }
+    }
+    return d;
   }
 
   // --- テンプレート ---

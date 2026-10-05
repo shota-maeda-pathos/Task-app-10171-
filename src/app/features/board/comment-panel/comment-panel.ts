@@ -207,7 +207,6 @@ export class CommentPanelComponent {
 
     this.isSubmitting.set(true);
     const submitted = text;
-    this.newComment = '';
 
     const member = this.tasksService.members().find((m) => m.uid === user.uid);
     const authorName = member?.name ?? user.displayName ?? user.email?.split('@')[0] ?? 'ゲスト';
@@ -216,8 +215,11 @@ export class CommentPanelComponent {
       await this.tasksService.addComment(task.id, submitted, user.uid, authorName);
     } catch (err) {
       console.error('コメント送信エラー:', err);
+      this.isSubmitting.set(false);
+      return;
     }
 
+    this.newComment = '';
     this.isSubmitting.set(false);
 
     // 1. 通知を送る対象者のIDリスト（重複を防ぐためにSetを使用）

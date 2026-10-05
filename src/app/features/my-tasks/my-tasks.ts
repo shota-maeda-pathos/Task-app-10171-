@@ -113,7 +113,26 @@ export class MyTasksComponent {
       .filter((t) => t.assigneeId === uid && t.status !== 'アーカイブ済み');
   });
 
-  rootTasks = computed(() => this.myTasks().filter((task) => !task.parentId));
+  rootTasks = computed(() => {
+    const myTaskIds = new Set(this.myTasks().map((t) => t.id));
+    const allTasks = this.tasksService.tasks();
+    const parentsWithMyChildren = new Set<string>();
+    for (const t of allTasks) {
+      if (t.parentId && myTaskIds.has(t.id)) {
+        parentsWithMyChildren.add(t.parentId);
+      }
+    }
+    const myRoots = this.myTasks().filter((task) => !task.parentId);
+    for (const parentId of parentsWithMyChildren) {
+      if (!myRoots.some((t) => t.id === parentId)) {
+        const parent = allTasks.find((t) => t.id === parentId);
+        if (parent && parent.status !== 'アーカイブ済み') {
+          myRoots.push(parent);
+        }
+      }
+    }
+    return myRoots;
+  });
 
   private filteredTasks = computed(() => {
     let tasks = this.rootTasks();
@@ -530,6 +549,7 @@ export class MyTasksComponent {
   startComplete(task: Task): void {
     if (!task.estimatedHours) {
       this.tasksService.completeTask(task.id, 0);
+      this.tasksService.spawnRecurrence(task);
       this.notificationService.show('完了', `「${task.title}」を完了にしました`);
       this.expandedTaskId.set(null);
       return;
@@ -543,6 +563,7 @@ export class MyTasksComponent {
     if (!task) return;
     const isSubtask = !!task.parentId;
     await this.tasksService.completeTask(task.id, this.actualHoursInput);
+    await this.tasksService.spawnRecurrence(task);
     this.notificationService.show('完了', `「${task.title}」を完了にしました`);
     this.completingTask = null;
     if (!isSubtask) {

@@ -1449,10 +1449,12 @@ export class App {
     this.fabFocus = false;
     this.fabRecurrence = null;
     this.fabError = '';
+    this.fabTemplateSubtasks = [];
   }
 
   closeFabModal(): void {
     this.showFabModal = false;
+    this.fabTemplateSubtasks = [];
   }
 
   applyFabTemplate(tpl: TaskTemplate): void {

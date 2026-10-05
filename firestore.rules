@@ -12,28 +12,50 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.role == 'manager';
     }
 
+    function onlyChanges(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
     match /members/{memberId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.uid == memberId;
+      allow create: if isSignedIn()
+                    && request.auth.uid == memberId;
       allow update: if isSignedIn()
-                    && (request.auth.uid == memberId || isManager());
+                    && isManager();
+      allow update: if isSignedIn()
+                    && request.auth.uid == memberId
+                    && onlyChanges(['displayName', 'theme', 'weeklyCapacity', 'photoURL', 'fcmToken']);
       allow delete: if isManager();
 
       match /notifications/{notifId} {
-        allow read: if isSignedIn() && request.auth.uid == memberId;
+        allow read: if isSignedIn()
+                    && (request.auth.uid == memberId || isManager());
         allow create: if isSignedIn();
         allow update: if isSignedIn() && request.auth.uid == memberId;
-        allow delete: if isSignedIn() && request.auth.uid == memberId;
+        allow delete: if isSignedIn()
+                      && (request.auth.uid == memberId || isManager());
       }
     }
 
+    function isTaskOwner() {
+      return resource.data.createdBy == request.auth.uid
+          || resource.data.assigneeId == request.auth.uid;
+    }
+
     match /tasks/{taskId} {
-      allow read, create, update, delete: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn()
+                    && (isManager() || resource.data.createdBy == request.auth.uid);
 
       match /comments/{commentId} {
         allow read: if isSignedIn();
         allow create: if isSignedIn();
-        allow delete: if isSignedIn();
+        allow update: if isSignedIn()
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']);
+        allow delete: if isSignedIn()
+                      && resource.data.authorId == request.auth.uid;
       }
 
       match /attachments/{attachmentId} {

@@ -265,14 +265,11 @@ export class DashboardComponent {
   // 過去4週間の完了タスク推移
   weeklyCompletionData = computed(() => {
     const weeks = [];
-    const now = new Date();
+    const currentMonday = getWeekMonday(new Date());
 
     for (let i = 3; i >= 0; i--) {
-      const weekStart = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() - i * 7 - now.getDay(),
-      );
+      const weekStart = new Date(currentMonday);
+      weekStart.setDate(weekStart.getDate() - i * 7);
       const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
       const label = `${weekStart.getMonth() + 1}/${weekStart.getDate()}週`;
 
@@ -317,7 +314,7 @@ export class DashboardComponent {
         const date = new Date(year, month, d);
         const isToday = date.toDateString() === now.toDateString();
         const tasks = this.tasksService.tasks().filter((t) => {
-          if (t.status === '完了' || !t.dueDate?.toDate) return false;
+          if (t.status === '完了' || t.status === 'アーカイブ済み' || !t.dueDate?.toDate) return false;
           const due = t.dueDate.toDate();
           return due.getFullYear() === year && due.getMonth() === month && due.getDate() === d;
         });
@@ -423,7 +420,11 @@ export class DashboardComponent {
       ];
     });
 
-    const escape = (v: string) => v.includes(',') || v.includes('"') || v.includes('\n') ? `"${v.replace(/"/g, '""')}"` : v;
+    const sanitize = (v: string) => /^[=+\-@\t\r]/.test(v) ? `\t${v}` : v;
+    const escape = (v: string) => {
+      const s = sanitize(v);
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+    };
     const csv = '﻿' + [header, ...rows].map((r) => r.map(escape).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);

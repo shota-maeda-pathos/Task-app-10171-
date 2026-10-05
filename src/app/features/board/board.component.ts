@@ -309,6 +309,7 @@ export class BoardComponent {
 
   newRootPriority: Priority | null = null;
   newRootRecurrence: RecurrenceType | null = null;
+  private newRootTemplateSubtasks: { title: string; estimatedHours: number }[] = [];
   newSubtaskPriority: Priority | null = null;
   editTaskPriority: Priority | null = null;
   editTaskBlockedBy: string[] = [];
@@ -395,7 +396,7 @@ export class BoardComponent {
         if (this.bulkStatus === '完了') {
           if (this.tasksService.isBlocked(task)) continue;
           await this.tasksService.completeTask(id, task.estimatedHours ?? 0);
-          this.spawnRecurrence(task);
+          await this.tasksService.spawnRecurrence(task);
         } else {
           await this.tasksService.updateStatus(id, this.bulkStatus as TaskStatus);
         }
@@ -1168,6 +1169,7 @@ export class BoardComponent {
     this.newRootPriority = tpl.priority;
     this.newRootFocus = false;
     this.addRootError = '';
+    this.newRootTemplateSubtasks = tpl.subtasks?.filter((s) => s.title.trim()) ?? [];
   }
 
   toggleAddRoot(status: TaskStatus): void {
@@ -1184,6 +1186,7 @@ export class BoardComponent {
       this.newRootFocus = false;
       this.newRootRecurrence = null;
       this.addRootError = '';
+      this.newRootTemplateSubtasks = [];
     }
   }
 
@@ -1240,8 +1243,22 @@ export class BoardComponent {
       focusHours: focus ? hours : null,
       recurrence: recurrence ?? null,
     });
+    for (const sub of this.newRootTemplateSubtasks) {
+      await this.tasksService.createTask({
+        title: sub.title,
+        description: '',
+        parentId: taskId,
+        assigneeId: assignee,
+        createdBy: this.auth.currentUser()?.uid ?? null,
+        estimatedHours: sub.estimatedHours,
+        dueDate: dueDate ? Timestamp.fromDate(dueDate) : null,
+        status: '未着手',
+        priority: this.newRootPriority,
+      });
+    }
     this.newRootPriority = null;
     this.newRootRecurrence = null;
+    this.newRootTemplateSubtasks = [];
     this.notificationService.show('タスク作成', `「${title}」を作成しました`);
     setTimeout(() => this.scrollToTask(taskId), 150);
   }
@@ -1426,7 +1443,7 @@ export class BoardComponent {
   startComplete(task: Task): void {
     if (!task.estimatedHours) {
       this.tasksService.completeTask(task.id, 0);
-      this.spawnRecurrence(task);
+      this.tasksService.spawnRecurrence(task);
       this.notificationService.show('完了', `「${task.title}」を完了にしました`);
       return;
     }
@@ -1438,46 +1455,14 @@ export class BoardComponent {
     const task = this.completingTask;
     if (!task) return;
     const hours = this.actualHoursInput;
-    if (!hours || hours < 0 || !Number.isFinite(hours)) {
+    if (hours == null || hours < 0 || !Number.isFinite(hours)) {
       this.notificationService.show('入力エラー', '実績時間を正しく入力してください');
       return;
     }
     this.completingTask = null;
     await this.tasksService.completeTask(task.id, hours);
-    this.spawnRecurrence(task);
+    await this.tasksService.spawnRecurrence(task);
     this.notificationService.show('完了', `「${task.title}」を完了にしました`);
-  }
-
-  private async spawnRecurrence(task: Task): Promise<void> {
-    if (!task.recurrence) return;
-    const nextDue = this.calcNextDueDate(task.dueDate?.toDate() ?? new Date(), task.recurrence);
-    await this.tasksService.createTask({
-      title: task.title,
-      description: task.description ?? '',
-      parentId: task.parentId,
-      assigneeId: task.assigneeId,
-      createdBy: task.createdBy,
-      estimatedHours: task.estimatedHours,
-      dueDate: Timestamp.fromDate(nextDue),
-      status: '未着手',
-      priority: task.priority,
-      focusThisWeek: false,
-      focusHours: null,
-      targetWeekStart: Timestamp.fromDate(getWeekMonday(nextDue)),
-      recurrence: task.recurrence,
-      recurrenceSourceId: task.recurrenceSourceId ?? task.id,
-    });
-  }
-
-  private calcNextDueDate(base: Date, type: RecurrenceType): Date {
-    const d = new Date(base);
-    switch (type) {
-      case 'daily': d.setDate(d.getDate() + 1); break;
-      case 'weekly': d.setDate(d.getDate() + 7); break;
-      case 'biweekly': d.setDate(d.getDate() + 14); break;
-      case 'monthly': d.setMonth(d.getMonth() + 1); break;
-    }
-    return d;
   }
 
   cancelComplete(): void {
@@ -1593,7 +1578,7 @@ export class BoardComponent {
     // 期限をdate input用の文字列に変換
     if (task.dueDate?.toDate) {
       const d = task.dueDate.toDate();
-      this.editTaskDueDate = d.toISOString().split('T')[0];
+      this.editTaskDueDate = this.formatLocalDate(d);
     } else {
       this.editTaskDueDate = '';
     }
@@ -2042,7 +2027,11 @@ export class BoardComponent {
       ];
     });
 
-    const escape = (v: string) => v.includes(',') || v.includes('"') || v.includes('\n') ? `"${v.replace(/"/g, '""')}"` : v;
+    const sanitize = (v: string) => /^[=+\-@\t\r]/.test(v) ? `\t${v}` : v;
+    const escape = (v: string) => {
+      const s = sanitize(v);
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+    };
     const csv = '﻿' + [header, ...rows].map((r) => r.map(escape).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);

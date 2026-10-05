@@ -37,22 +37,28 @@ export class AuthService {
     const memberRef = doc(this.firestore, 'members', firebaseUser.uid);
     const snapshot = await getDoc(memberRef);
 
-    if (!snapshot.exists()) {
-      const membersCol = collection(this.firestore, 'members');
-      const membersSnap = await getDocs(membersCol);
-      const role = membersSnap.empty ? 'manager' : 'member';
-
-      // displayNameがない場合はemailの@より前の部分を名前として使う
-      const name = firebaseUser.displayName ?? firebaseUser.email?.split('@')[0] ?? '名称未設定';
-
-      await setDoc(memberRef, {
-        uid: firebaseUser.uid,
-        name,
-        role,
-        weeklyCapacityHours: 40,
-        avatarColor: randomAvatarColor(),
-      });
+    if (snapshot.exists()) {
+      if (snapshot.data()?.['disabled']) {
+        await this.auth.signOut();
+        throw new Error('このアカウントは無効化されています。管理者にお問い合わせください。');
+      }
+      return;
     }
+
+    const membersCol = collection(this.firestore, 'members');
+    const membersSnap = await getDocs(membersCol);
+    const isFirstMember = membersSnap.docs.filter(d => !d.data()['disabled']).length === 0;
+    const role = isFirstMember ? 'manager' : 'member';
+
+    const name = firebaseUser.displayName ?? firebaseUser.email?.split('@')[0] ?? '名称未設定';
+
+    await setDoc(memberRef, {
+      uid: firebaseUser.uid,
+      name,
+      role,
+      weeklyCapacityHours: 40,
+      avatarColor: randomAvatarColor(),
+    });
   }
 }
 
