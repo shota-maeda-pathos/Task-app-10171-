@@ -396,7 +396,6 @@ export class BoardComponent {
         if (this.bulkStatus === '完了') {
           if (this.tasksService.isBlocked(task)) continue;
           await this.tasksService.completeTask(id, task.estimatedHours ?? 0);
-          await this.tasksService.spawnRecurrence(task);
         } else {
           await this.tasksService.updateStatus(id, this.bulkStatus as TaskStatus);
         }
@@ -447,19 +446,44 @@ export class BoardComponent {
   }
 
   async bulkDelete(): Promise<void> {
+    if (this.deleteInProgress()) return;
+    this.deleteInProgress.set(true);
     const ids = [...this.bulkSelected()];
     let deleted = 0;
-    for (const id of ids) {
-      const task = this.tasksService.tasks().find((t) => t.id === id);
-      if (!task || !this.canMoveTask(task)) continue;
-      const shouldCloseCommentPanel = this.isTaskInDeleteTree(this.selectedTask()?.id, id);
-      await this.tasksService.deleteTask(id);
-      if (shouldCloseCommentPanel) this.closeCommentPanel();
-      deleted++;
+    try {
+      // Check the currently visible trees before starting a multi-selection.
+      const checkIds = [...ids];
+      const checked = new Set<string>();
+      const allTasks = this.tasksService.tasks();
+      while (checkIds.length) {
+        const id = checkIds.pop()!;
+        if (checked.has(id)) continue;
+        checked.add(id);
+        const task = allTasks.find(task => task.id === id);
+        if (task && !this.tasksService.canDeleteTask(task)) throw new Error('削除権限のないタスクが含まれています');
+        checkIds.push(...allTasks.filter(task => task.parentId === id).map(task => task.id));
+      }
+      for (const id of ids) {
+        const task = this.tasksService.tasks().find((t) => t.id === id);
+        if (!task) continue;
+        const shouldCloseCommentPanel = this.isTaskInDeleteTree(this.selectedTask()?.id, id);
+        await this.tasksService.deleteTask(id);
+        if (shouldCloseCommentPanel) this.closeCommentPanel();
+        deleted++;
+        this.bulkSelected.update(selected => {
+          const remaining = new Set(selected);
+          remaining.delete(id);
+          return remaining;
+        });
+      }
+      this.notificationService.show('一括削除', `${deleted}件のタスクを削除しました`);
+      this.bulkSelected.set(new Set());
+      this.bulkDeleting = false;
+    } catch (error) {
+      this.notificationService.show('削除エラー', `${deleted}件削除済み。残りは再試行できます。${(error as Error).message}`);
+    } finally {
+      this.deleteInProgress.set(false);
     }
-    this.notificationService.show('一括削除', `${deleted}件のタスクを削除しました`);
-    this.bulkSelected.set(new Set());
-    this.bulkDeleting = false;
   }
 
   selectedTask = signal<Task | null>(null);
@@ -940,7 +964,9 @@ export class BoardComponent {
       }
     }
 
-    return Math.round((totalHours / member.weeklyCapacityHours) * 100);
+    const cap = this.tasksService.getEffectiveCapacity(memberId, 0);
+    if (cap <= 0) return totalHours > 0 ? -1 : 0;
+    return Math.round((totalHours / cap) * 100);
   }
 
   private getEditLoadPct(memberId: string, addHours: number): number {
@@ -957,7 +983,9 @@ export class BoardComponent {
     );
     let totalHours = tasks.reduce((sum, t) => sum + (t.focusHours ?? t.estimatedHours ?? 0), 0);
     totalHours += addHours;
-    return Math.round((totalHours / member.weeklyCapacityHours) * 100);
+    const cap = this.tasksService.getEffectiveCapacity(memberId, 0);
+    if (cap <= 0) return totalHours > 0 ? -1 : 0;
+    return Math.round((totalHours / cap) * 100);
   }
 
   getBlockedLabel(task: Task): string | null {
@@ -1006,9 +1034,14 @@ export class BoardComponent {
   }
 
   loadLevel(pct: number): LoadLevel {
+    if (pct < 0) return 'danger';
     if (pct >= 100) return 'danger';
     if (pct >= 80) return 'warn';
     return 'ok';
+  }
+
+  loadLabel(pct: number): string {
+    return pct < 0 ? '稼働予定なし' : pct + '%';
   }
 
   suggestAlternative(excludeId: string | null): { uid: string; name: string; pct: number } | null {
@@ -1362,7 +1395,7 @@ export class BoardComponent {
       await this.tasksService.updateStatus(child.id, this.columns[0]);
     } else {
       // 未完了 → 完了モーダルを表示して実績時間を入力させる
-      this.startComplete(child);
+      await this.startComplete(child);
     }
   }
 
@@ -1449,11 +1482,18 @@ export class BoardComponent {
     }
   }
 
-  startComplete(task: Task): void {
+  async startComplete(task: Task): Promise<void> {
+    if (this.tasksService.isBlocked(task)) {
+      this.notificationService.show('ブロック中', `「${task.title}」は依存タスクが完了するまで完了にできません`);
+      return;
+    }
     if (!task.estimatedHours) {
-      this.tasksService.completeTask(task.id, 0);
-      this.tasksService.spawnRecurrence(task);
-      this.notificationService.show('完了', `「${task.title}」を完了にしました`);
+      try {
+        await this.tasksService.completeTask(task.id, 0);
+        this.notificationService.show('完了', `「${task.title}」を完了にしました`);
+      } catch (error) {
+        this.notificationService.show('完了エラー', error instanceof Error ? error.message : 'タスクの完了に失敗しました');
+      }
       return;
     }
     this.completingTask = task;
@@ -1468,10 +1508,13 @@ export class BoardComponent {
       this.notificationService.show('入力エラー', '実績時間を正しく入力してください');
       return;
     }
-    this.completingTask = null;
-    await this.tasksService.completeTask(task.id, hours);
-    await this.tasksService.spawnRecurrence(task);
-    this.notificationService.show('完了', `「${task.title}」を完了にしました`);
+    try {
+      await this.tasksService.completeTask(task.id, hours);
+      this.completingTask = null;
+      this.notificationService.show('完了', `「${task.title}」を完了にしました`);
+    } catch (error) {
+      this.notificationService.show('完了エラー', error instanceof Error ? error.message : 'タスクの完了に失敗しました');
+    }
   }
 
   cancelComplete(): void {
@@ -1554,9 +1597,10 @@ export class BoardComponent {
   }
 
   // --- 削除 ---
+  deleteInProgress = signal(false);
 
   deleteTask(task: Task): void {
-    if (!this.canMoveTask(task)) {
+    if (!this.tasksService.canDeleteTask(task)) {
       this.notificationService.show('権限エラー', '他人のタスクは削除できません');
       return;
     }
@@ -1566,16 +1610,28 @@ export class BoardComponent {
 
   async confirmDelete(): Promise<void> {
     const task = this.deletingTask;
-    if (!task) return;
-    this.deletingTask = null;
+    if (!task || this.deleteInProgress()) return;
+    this.deleteInProgress.set(true);
     const shouldCloseCommentPanel = this.isTaskInDeleteTree(this.selectedTask()?.id, task.id);
-    await this.tasksService.deleteTask(task.id);
-    if (shouldCloseCommentPanel) this.closeCommentPanel();
-    this.notificationService.show('削除完了', `「${task.title}」を削除しました`);
+    try {
+      const result = await this.tasksService.deleteTask(task.id);
+      this.deletingTask = null;
+      if (shouldCloseCommentPanel) this.closeCommentPanel();
+      this.notificationService.show('削除完了', `「${task.title}」を削除しました${result.cleanupPending ? '。添付ファイルの削除は自動で再試行します' : ''}`);
+    } catch (error) {
+      this.notificationService.show('削除エラー', (error as Error).message || '削除に失敗しました。再試行してください');
+    } finally {
+      this.deleteInProgress.set(false);
+    }
   }
 
   cancelDelete(): void {
+    if (this.deleteInProgress()) return;
     this.deletingTask = null;
+  }
+
+  cancelBulkDelete(): void {
+    if (!this.deleteInProgress()) this.bulkDeleting = false;
   }
 
   openEditTask(task: Task, event?: Event): void {

@@ -1,4 +1,5 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, Injector, inject } from '@angular/core';
+import { observeActiveUser } from './active-user';
 import {
   Auth,
   GoogleAuthProvider,
@@ -9,14 +10,15 @@ import {
   signInWithEmailAndPassword,
 } from '@angular/fire/auth';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { Firestore, doc, getDoc, setDoc, collection, getDocs } from '@angular/fire/firestore';
+import { Firestore, doc, getDoc, setDoc } from '@angular/fire/firestore';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private auth = inject(Auth);
   private firestore = inject(Firestore);
+  private injector = inject(Injector);
 
-  currentUser = toSignal(user(this.auth));
+  currentUser = toSignal(observeActiveUser(this.auth, this.firestore, this.injector));
 
   async loginWithGoogle(): Promise<void> {
     const provider = new GoogleAuthProvider();
@@ -45,17 +47,12 @@ export class AuthService {
       return;
     }
 
-    const membersCol = collection(this.firestore, 'members');
-    const membersSnap = await getDocs(membersCol);
-    const isFirstMember = membersSnap.docs.filter(d => !d.data()['disabled']).length === 0;
-    const role = isFirstMember ? 'manager' : 'member';
-
     const name = firebaseUser.displayName ?? firebaseUser.email?.split('@')[0] ?? '名称未設定';
 
     await setDoc(memberRef, {
       uid: firebaseUser.uid,
       name,
-      role,
+      role: 'member',
       weeklyCapacityHours: 40,
       avatarColor: randomAvatarColor(),
     });

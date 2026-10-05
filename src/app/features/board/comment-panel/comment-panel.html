@@ -150,7 +150,7 @@
                 <div class="attachment-actions">
                   <button class="attachment-dl" (click)="downloadAttachment(att)" title="ダウンロード">⬇</button>
                   @if (att.authorId === auth.currentUser()?.uid) {
-                    <button class="attachment-del" (click)="deleteAttachment(att)" title="削除">✕</button>
+                    <button class="attachment-del" type="button" [disabled]="deletingAttachmentIds().has(att.id)" (click)="deleteAttachment(att)" title="削除" [attr.aria-label]="att.fileName + 'を削除'">{{ deletingAttachmentIds().has(att.id) ? '…' : '✕' }}</button>
                   }
                 </div>
               </div>
@@ -165,11 +165,12 @@
             [(ngModel)]="newComment"
             placeholder="コメントを入力... @でメンション"
             class="comment-input"
+            [attr.disabled]="isSubmitting() ? '' : null"
             (input)="onCommentInput($event)"
             (keydown.meta.enter)="submitComment()"
             (keydown.control.enter)="submitComment()"
           ></textarea>
-          @if (mentionSuggestions().length > 0) {
+          @if (mentionSuggestions().length > 0 && !isSubmitting()) {
             <div class="mention-dropdown">
               @for (m of mentionSuggestions(); track m.uid) {
                 <button class="mention-item" (mousedown)="insertMention(m)">
@@ -181,8 +182,8 @@
         </div>
         <div class="comment-form-footer">
           <span class="comment-hint">Ctrl+Enter で送信 / @でメンション</span>
-          <button class="submit-btn" (click)="submitComment()" [disabled]="!newComment.trim()">
-            送信
+          <button class="submit-btn" (click)="submitComment()" [disabled]="!newComment.trim() || isSubmitting()">
+            {{ isSubmitting() ? '送信中…' : '送信' }}
           </button>
         </div>
       </div>

@@ -1,10 +1,13 @@
 import { leaveDayFraction, mergeMemberLeaves } from '../utils/leave-utils';
+import { observeActiveUser } from './active-user';
 import { Injectable, inject, Injector, runInInjectionContext, computed, effect } from '@angular/core';
 import { Auth, user } from '@angular/fire/auth';
 import { Storage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from '@angular/fire/storage';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Observable, switchMap, of, map, catchError } from 'rxjs';
 import { Firestore, collectionData, docData } from '@angular/fire/firestore';
+import { Functions } from '@angular/fire/functions';
+import { httpsCallable } from 'firebase/functions';
 import {
   collection,
   doc,
@@ -51,8 +54,10 @@ const VALID_STATUSES: Set<string> = new Set<string>([
 export class TasksService {
   private firestore = inject(Firestore);
   private storage = inject(Storage);
+  private functions = inject(Functions);
   private auth = inject(Auth);
   private injector = inject(Injector);
+  private activeUser = observeActiveUser(this.auth, this.firestore, this.injector);
   private tasksCollection = collection(this.firestore, 'tasks');
   private membersCollection = collection(this.firestore, 'members');
   private templatesCollection = collection(this.firestore, 'taskTemplates');
@@ -63,9 +68,10 @@ export class TasksService {
   private lastRootTaskOrder = 0;
   private subtaskReorderQueues = new Map<string, Promise<void>>();
   private lastSubtaskOrder = new Map<string, number>();
+  private completionRequests = new Map<string, Promise<void>>();
 
   tasks = toSignal(
-    user(this.auth).pipe(
+    this.activeUser.pipe(
       switchMap((currentUser) => {
         if (!currentUser) return of([]);
         return runInInjectionContext(this.injector, () =>
@@ -113,7 +119,7 @@ export class TasksService {
   }
 
   private allMembers = toSignal(
-    user(this.auth).pipe(
+    this.activeUser.pipe(
       switchMap((currentUser) => {
         if (!currentUser) return of([]);
         return runInInjectionContext(this.injector, () =>
@@ -129,13 +135,13 @@ export class TasksService {
   disabledMembers = computed(() => this.allMembers().filter((m) => m.disabled));
 
   teamSettings = toSignal(
-    user(this.auth).pipe(
+    this.activeUser.pipe(
       switchMap((currentUser) => {
         if (!currentUser) return of({ holidays: [] } as TeamSettings);
         return runInInjectionContext(this.injector, () =>
           (docData(this.teamSettingsDoc) as Observable<TeamSettings>).pipe(
             map((data) => data ?? { holidays: [] }),
-            catchError(() => of({ holidays: [] } as TeamSettings)),
+            catchError(() => of({ holidays: [], _error: true } as TeamSettings)),
           ),
         );
       }),
@@ -144,7 +150,7 @@ export class TasksService {
   );
 
   private allTemplates = toSignal(
-    user(this.auth).pipe(
+    this.activeUser.pipe(
       switchMap((currentUser) => {
         if (!currentUser) return of([]);
         return runInInjectionContext(this.injector, () =>
@@ -160,7 +166,7 @@ export class TasksService {
   );
 
   templates = toSignal(
-    user(this.auth).pipe(
+    this.activeUser.pipe(
       switchMap((currentUser) => {
         if (!currentUser) return of([]);
         return runInInjectionContext(this.injector, () =>
@@ -192,6 +198,8 @@ export class TasksService {
   }
 
   async createTask(data: Partial<Task>): Promise<string> {
+    const uid = this.auth.currentUser?.uid;
+    if (!uid) throw new Error('ログインしてください');
     const rawHours = data.estimatedHours ?? 0;
     const estimatedHours = Number.isFinite(rawHours) && rawHours >= 0 ? rawHours : 0;
     const focusThisWeek = data.focusThisWeek ?? false;
@@ -200,7 +208,7 @@ export class TasksService {
       description: data.description ?? '',
       parentId: data.parentId ?? null,
       assigneeId: data.assigneeId ?? null,
-      createdBy: data.createdBy ?? null,
+      createdBy: data.recurrencePreviousTaskId ? (data.createdBy ?? null) : uid,
       status: data.status ?? '未着手',
       estimatedHours,
       actualHours: null,
@@ -219,6 +227,7 @@ export class TasksService {
       targetWeekStart: data.targetWeekStart ?? null,
       recurrence: data.recurrence ?? null,
       recurrenceSourceId: data.recurrenceSourceId ?? null,
+      recurrencePreviousTaskId: data.recurrencePreviousTaskId ?? null,
     });
 
     this.addActivity(docRef.id, 'created').catch(() => {});
@@ -282,7 +291,7 @@ export class TasksService {
     if (childTotal !== (parentData.estimatedHours ?? 0)) {
       updates['estimatedHours'] = childTotal;
     }
-    if ((parentData.focusHours ?? 0) > childTotal && childTotal > 0) {
+    if ((parentData.focusHours ?? 0) > childTotal) {
       updates['focusHours'] = childTotal;
     }
     if (Object.keys(updates).length > 0) {
@@ -302,6 +311,7 @@ export class TasksService {
     if (oldStatus && oldStatus !== status) {
       this.addActivity(taskId, 'status_change', oldStatus, status).catch(() => {});
     }
+    if (task?.parentId) await this.syncParentEstimate(task.parentId);
   }
 
   async updateTask(taskId: string, data: Partial<Task>): Promise<void> {
@@ -457,9 +467,24 @@ export class TasksService {
     }
   }
 
-  async completeTask(taskId: string, actualHours: number): Promise<void> {
+  completeTask(taskId: string, actualHours: number): Promise<void> {
+    const pending = this.completionRequests.get(taskId);
+    if (pending) return pending;
+    const request = this.performCompletion(taskId, actualHours).finally(() => {
+      this.completionRequests.delete(taskId);
+    });
+    this.completionRequests.set(taskId, request);
+    return request;
+  }
+
+  private async performCompletion(taskId: string, actualHours: number): Promise<void> {
     const safeHours = Number.isFinite(actualHours) && actualHours >= 0 ? actualHours : 0;
     const task = this.tasks().find((t) => t.id === taskId);
+    if (!task) throw new Error('タスクが見つかりません。画面を再読み込みしてください');
+    if (task.status === '完了' || task.status === 'アーカイブ済み') return;
+    if (this.isBlocked(task)) {
+      throw new Error(`「${task.title}」は依存タスクが完了するまで完了にできません`);
+    }
     const oldStatus = task?.status ?? null;
     const ref = doc(this.firestore, 'tasks', taskId);
     await updateDoc(ref, {
@@ -495,66 +520,25 @@ export class TasksService {
       }),
     );
     Promise.all(notificationPromises).catch((err) => console.error('通知作成エラー:', err));
-  }
-
-  async deleteTask(taskId: string): Promise<void> {
-    const task = this.tasks().find((t) => t.id === taskId);
-    const parentId = task?.parentId ?? null;
-
-    await this.deleteTaskRecursive(taskId);
-
-    if (parentId) {
-      await this.syncParentAfterDelete(parentId);
+    try {
+      await this.spawnRecurrence(task);
+    } catch {
+      throw new Error('タスクは完了しましたが、繰り返しの次回作成に失敗しました。次回タスクを確認してください');
+    } finally {
+      if (task.parentId) await this.syncParentEstimate(task.parentId);
     }
   }
 
-  private async deleteTaskRecursive(taskId: string): Promise<void> {
-    const children = this.tasks().filter((t) => t.parentId === taskId);
-    for (const child of children) {
-      await this.deleteTaskRecursive(child.id);
-    }
-    await this.deleteTaskSubcollections(taskId);
-    await deleteDoc(doc(this.firestore, 'tasks', taskId));
+  canDeleteTask(task: Task): boolean {
+    const uid = this.auth.currentUser?.uid;
+    const member = this.members().find((member) => member.uid === uid);
+    return !!member && (member.role === 'manager' || task.createdBy === uid || task.assigneeId === uid);
   }
 
-  private async deleteTaskSubcollections(taskId: string): Promise<void> {
-    const attachCol = collection(this.firestore, 'tasks', taskId, 'attachments');
-    const attachSnap = await getDocs(attachCol);
-    for (const d of attachSnap.docs) {
-      const data = d.data();
-      if (data['storagePath']) {
-        try {
-          await deleteObject(storageRef(this.storage, data['storagePath']));
-        } catch (_) { /* ファイルが既に存在しない場合は無視 */ }
-      }
-      await deleteDoc(d.ref);
-    }
-
-    for (const sub of ['comments', 'activities']) {
-      const col = collection(this.firestore, 'tasks', taskId, sub);
-      const snap = await getDocs(col);
-      for (const d of snap.docs) {
-        await deleteDoc(d.ref);
-      }
-    }
-  }
-
-  private async syncParentAfterDelete(parentId: string): Promise<void> {
-    const parentRef = doc(this.firestore, 'tasks', parentId);
-    const parentSnap = await getDoc(parentRef);
-    if (!parentSnap.exists()) return;
-    const parentData = parentSnap.data() as Task;
-
-    const childrenQuery = query(this.tasksCollection, where('parentId', '==', parentId));
-    const childrenSnap = await getDocs(childrenQuery);
-    const remainingTotal = childrenSnap.docs.reduce(
-      (sum, d) => sum + ((d.data() as Task).estimatedHours ?? 0),
-      0,
-    );
-
-    if (remainingTotal !== (parentData.estimatedHours ?? 0)) {
-      await updateDoc(parentRef, { estimatedHours: remainingTotal });
-    }
+  async deleteTask(taskId: string): Promise<{ cleanupPending: boolean }> {
+    const callable = httpsCallable<{ taskId: string }, { cleanupPending: boolean }>(this.functions, 'deleteTaskSafely');
+    const response = await callable({ taskId });
+    return response.data;
   }
 
   async updateMemberCapacity(memberId: string, capacityHours: number): Promise<void> {
@@ -826,10 +810,16 @@ export class TasksService {
 
   // --- 祝日・休暇 ---
 
-  async addHoliday(holiday: TeamHoliday): Promise<void> {
-    const current = this.teamSettings()?.holidays ?? [];
-    if (current.some((h) => h.date === holiday.date)) return;
-    await setDoc(this.teamSettingsDoc, { holidays: [...current, holiday] }, { merge: true });
+  async addHoliday(holiday: TeamHoliday): Promise<boolean> {
+    return runTransaction(this.firestore, async transaction => {
+      const snapshot = await transaction.get(this.teamSettingsDoc);
+      const current = (snapshot.data()?.['holidays'] ?? []) as TeamHoliday[];
+      if (current.some((h) => h.date === holiday.date)) return false;
+      transaction.set(this.teamSettingsDoc, {
+        holidays: [...current, holiday].sort((a, b) => a.date.localeCompare(b.date)),
+      }, { merge: true });
+      return true;
+    });
   }
 
   async addHolidays(holidays: TeamHoliday[]): Promise<number> {
@@ -847,8 +837,13 @@ export class TasksService {
   }
 
   async removeHoliday(date: string): Promise<void> {
-    const current = this.teamSettings()?.holidays ?? [];
-    await setDoc(this.teamSettingsDoc, { holidays: current.filter((h) => h.date !== date) }, { merge: true });
+    await runTransaction(this.firestore, async transaction => {
+      const snapshot = await transaction.get(this.teamSettingsDoc);
+      const current = (snapshot.data()?.['holidays'] ?? []) as TeamHoliday[];
+      transaction.set(this.teamSettingsDoc, {
+        holidays: current.filter((h) => h.date !== date),
+      }, { merge: true });
+    });
   }
 
   async addLeave(memberId: string, leaves: MemberLeave[]): Promise<void> {
@@ -862,10 +857,13 @@ export class TasksService {
   }
 
   async removeLeave(memberId: string, date: string): Promise<void> {
-    const member = this.members().find((m) => m.uid === memberId);
-    const current = member?.leaves ?? [];
     const ref = doc(this.firestore, 'members', memberId);
-    await updateDoc(ref, { leaves: current.filter((l) => l.date !== date) });
+    await runTransaction(this.firestore, async transaction => {
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists()) throw new Error('メンバーが見つかりません');
+      const current = (snapshot.data()['leaves'] ?? []) as MemberLeave[];
+      transaction.update(ref, { leaves: current.filter((l) => l.date !== date) });
+    });
   }
 
   getWorkingDays(memberId: string, weekIndex: number): number {
@@ -921,6 +919,13 @@ export class TasksService {
     return totalHours;
   }
 
+  private dailyStartWeek(task: Task): number {
+    const date = task.targetWeekStart ?? task.dueDate;
+    if (!date) return 0;
+    const start = date instanceof Timestamp ? date.toDate() : new Date(date as any);
+    return Math.max(0, Math.round((getWeekMonday(start).getTime() - getWeekMonday(new Date()).getTime()) / (7 * 24 * 60 * 60 * 1000)));
+  }
+
   getMemberFocusHours(memberId: string): number {
     const tasks = this.tasks();
     let totalHours = 0;
@@ -930,11 +935,12 @@ export class TasksService {
       if (t.status === '完了' || t.status === 'アーカイブ済み') continue;
       if (t.assigneeId !== memberId) continue;
       if (!t.focusThisWeek) continue;
+      if (t.recurrence === 'daily' && this.dailyStartWeek(t) > 0) continue;
 
       countedTaskIds.add(t.id);
 
       let hours = t.focusHours ?? t.estimatedHours ?? 0;
-      if (t.recurrence === 'daily') {
+      if (t.recurrence === 'daily' && t.focusHours == null) {
         hours = (t.estimatedHours ?? 0) * this.getWorkingDays(memberId, 0);
       }
 
@@ -962,9 +968,10 @@ export class TasksService {
       if (t.assigneeId !== memberId) continue;
       if (!t.parentId) continue;
       if (countedTaskIds.has(t.id)) continue;
+      if (t.recurrence === 'daily' && this.dailyStartWeek(t) > 0) continue;
 
       const parent = tasks.find((p) => p.id === t.parentId);
-      if (parent && parent.focusThisWeek) {
+      if (parent && parent.focusThisWeek && (parent.recurrence !== 'daily' || this.dailyStartWeek(parent) === 0)) {
         totalHours += t.estimatedHours ?? 0;
       }
     }
@@ -973,14 +980,10 @@ export class TasksService {
   }
 
   getFocusLoadPercent(memberId: string): number {
-    const member = this.members().find((m) => m.uid === memberId);
-    if (!member) return 0;
     const focusHours = this.getMemberFocusHours(memberId);
-    if (!member.weeklyCapacityHours || member.weeklyCapacityHours <= 0) return 0;
-    const workingDays = this.getWorkingDays(memberId, 0);
-    const adjustedCapacity = member.weeklyCapacityHours * (workingDays / 5);
-    if (adjustedCapacity <= 0) return 0;
-    return Math.round((focusHours / adjustedCapacity) * 100);
+    const cap = this.getEffectiveCapacity(memberId, 0);
+    if (cap <= 0) return focusHours > 0 ? -1 : 0;
+    return Math.round((focusHours / cap) * 100);
   }
 
   getMemberFocusTaskCount(memberId: string): number {
@@ -989,6 +992,7 @@ export class TasksService {
         t.assigneeId === memberId &&
         t.status !== '完了' &&
         t.status !== 'アーカイブ済み' &&
+        (t.recurrence !== 'daily' || this.dailyStartWeek(t) === 0) &&
         t.focusThisWeek,
     ).length;
   }
@@ -1030,7 +1034,7 @@ export class TasksService {
 
       const weekIndices: { idx: number; hours: number }[] = [];
 
-      if (t.focusThisWeek) {
+      if (t.focusThisWeek && (t.recurrence !== 'daily' || this.dailyStartWeek(t) === 0)) {
         weekIndices.push({ idx: 0, hours: t.focusHours ?? t.estimatedHours ?? 0 });
       }
 
@@ -1047,8 +1051,10 @@ export class TasksService {
       if (t.recurrence) {
         const perOccurrence = t.estimatedHours ?? 0;
         if (t.recurrence === 'daily') {
-          for (let w = 0; w <= 3; w++) {
-            const weeklyTotal = perOccurrence * this.getWorkingDays(memberId, w);
+          for (let w = this.dailyStartWeek(t); w <= 3; w++) {
+            const weeklyTotal = w === 0 && t.focusThisWeek && t.focusHours != null
+              ? t.focusHours
+              : perOccurrence * this.getWorkingDays(memberId, w);
             const existing = weekIndices.find((wi) => wi.idx === w);
             if (existing) {
               existing.hours = weeklyTotal;
@@ -1067,11 +1073,11 @@ export class TasksService {
         }
       }
 
-      if (weekIndices.length === 0 && t.parentId) {
+      if (weekIndices.length === 0 && t.parentId && !(t.recurrence === 'daily' && this.dailyStartWeek(t) > 0)) {
         const parent = tasks.find((p) => p.id === t.parentId);
         if (parent) {
           let parentIdx: number | null = null;
-          if (parent.focusThisWeek) {
+          if (parent.focusThisWeek && (parent.recurrence !== 'daily' || this.dailyStartWeek(parent) === 0)) {
             parentIdx = 0;
           } else {
             parentIdx = parent.targetWeekStart
@@ -1121,7 +1127,7 @@ export class TasksService {
 
       const counted = new Set<number>();
 
-      if (t.focusThisWeek) {
+      if (t.focusThisWeek && (t.recurrence !== 'daily' || this.dailyStartWeek(t) === 0)) {
         counted.add(0);
       }
 
@@ -1135,9 +1141,11 @@ export class TasksService {
         counted.add(scheduledWeek);
       }
 
-      if (t.recurrence) {
+      if (t.recurrence === 'daily') {
+        for (let w = this.dailyStartWeek(t); w <= 3; w++) counted.add(w);
+      } else if (t.recurrence) {
         const baseWeek = counted.size > 0 ? Math.min(...counted) : 0;
-        const step = t.recurrence === 'daily' ? 1 : t.recurrence === 'weekly' ? 1 : t.recurrence === 'biweekly' ? 2 : 4;
+        const step = t.recurrence === 'weekly' ? 1 : t.recurrence === 'biweekly' ? 2 : 4;
         for (let w = baseWeek + step; w <= 3; w += step) {
           counted.add(w);
         }
@@ -1152,10 +1160,17 @@ export class TasksService {
     return counts;
   }
 
-  getWeeklyLoadPercent(memberId: string, weekHours: number): number {
+  getEffectiveCapacity(memberId: string, weekIndex: number): number {
     const member = this.members().find((m) => m.uid === memberId);
     if (!member || !member.weeklyCapacityHours || member.weeklyCapacityHours <= 0) return 0;
-    return Math.round((weekHours / member.weeklyCapacityHours) * 100);
+    const workingDays = this.getWorkingDays(memberId, weekIndex);
+    return member.weeklyCapacityHours * (workingDays / 5);
+  }
+
+  getWeeklyLoadPercent(memberId: string, weekHours: number, weekIndex: number = 0): number {
+    const cap = this.getEffectiveCapacity(memberId, weekIndex);
+    if (cap <= 0) return weekHours > 0 ? -1 : 0;
+    return Math.round((weekHours / cap) * 100);
   }
 
   getComments(taskId: string): Observable<TaskComment[]> {
@@ -1345,7 +1360,7 @@ export class TasksService {
     const member = this.members().find((m) => m.uid === uid);
     const timestamp = Date.now();
     const safeName = fileName.replace(/[^a-zA-Z0-9._\-　-鿿豈-﫿]/g, '_');
-    const path = `task-attachments/${taskId}/${timestamp}_${safeName}`;
+    const path = `task-attachments/${taskId}/${uid}/${timestamp}_${safeName}`;
     const fileRef = storageRef(this.storage, path);
     await uploadBytes(fileRef, file);
     const downloadUrl = await getDownloadURL(fileRef);
@@ -1367,9 +1382,31 @@ export class TasksService {
     const docRef = doc(this.firestore, 'tasks', taskId, 'attachments', attachmentId);
     const snap = await getDoc(docRef);
     const data = snap.data();
+    if (!snap.exists()) return;
+    if (!this.auth.currentUser || data?.['authorId'] !== this.auth.currentUser.uid) {
+      throw Object.assign(new Error('Only the attachment author can delete it'), { code: 'permission-denied' });
+    }
     if (data?.['storagePath']) {
-      const fileRef = storageRef(this.storage, data['storagePath']);
-      await deleteObject(fileRef);
+      const path = data['storagePath'] as string;
+      const legacyPrefix = `task-attachments/${taskId}/`;
+      const legacyFileName = path.startsWith(legacyPrefix) ? path.slice(legacyPrefix.length) : '';
+      if (legacyFileName && !legacyFileName.includes('/')) {
+        // Legacy filenames lack a UID. Rules verify this claim against the original attachment.
+        const ownerRef = doc(this.firestore, 'tasks', taskId, 'attachmentOwners', legacyFileName);
+        const owner = await getDoc(ownerRef);
+        if (!owner.exists()) {
+          await setDoc(ownerRef, { attachmentId, authorId: this.auth.currentUser.uid });
+        }
+      }
+      try {
+        await runInInjectionContext(this.injector, () => {
+          const fileRef = storageRef(this.storage, data['storagePath']);
+          return deleteObject(fileRef);
+        });
+      } catch (error) {
+        // A missing file must not prevent removal of its attachment record.
+        if ((error as { code?: string })?.code !== 'storage/object-not-found') throw error;
+      }
     }
     await deleteDoc(docRef);
   }
@@ -1394,6 +1431,7 @@ export class TasksService {
       targetWeekStart: Timestamp.fromDate(getWeekMonday(nextDue)),
       recurrence: task.recurrence,
       recurrenceSourceId: task.recurrenceSourceId ?? task.id,
+      recurrencePreviousTaskId: task.id,
     });
   }
 
@@ -1417,8 +1455,11 @@ export class TasksService {
   // --- テンプレート ---
 
   async createTemplate(data: Omit<TaskTemplate, 'id' | 'createdAt'>): Promise<string> {
+    const uid = this.auth.currentUser?.uid;
+    if (!uid) throw new Error('ログインしてください');
     const docRef = await addDoc(this.templatesCollection, {
       ...data,
+      createdBy: uid,
       createdAt: serverTimestamp(),
     });
     return docRef.id;

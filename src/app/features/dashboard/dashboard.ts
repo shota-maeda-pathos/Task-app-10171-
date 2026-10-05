@@ -227,9 +227,14 @@ export class DashboardComponent {
   }
 
   loadLevel(pct: number): string {
+    if (pct < 0) return 'danger';
     if (pct >= 100) return 'danger';
     if (pct >= 80) return 'warn';
     return 'ok';
+  }
+
+  loadLabel(pct: number): string {
+    return pct < 0 ? '稼働予定なし' : pct + '%';
   }
   // カレンダー用: 今月と来月の日付グリッドを生成
 
@@ -381,25 +386,31 @@ export class DashboardComponent {
   }
 
   deletingTask: Task | null = null;
+  deleteInProgress = signal(false);
 
   openDeleteTask(task: Task): void {
+    if (!this.tasksService.canDeleteTask(task)) return;
     this.deletingTask = task;
   }
 
   cancelDeleteTask(): void {
+    if (this.deleteInProgress()) return;
     this.deletingTask = null;
   }
 
   async confirmDeleteTask(): Promise<void> {
-    if (!this.deletingTask) return;
+    if (!this.deletingTask || this.deleteInProgress()) return;
     const task = this.deletingTask;
-    this.deletingTask = null;
+    this.deleteInProgress.set(true);
     try {
-      await this.tasksService.deleteTask(task.id);
-      this.notificationService.show('削除完了', `「${task.title}」を削除しました`);
+      const result = await this.tasksService.deleteTask(task.id);
+      this.deletingTask = null;
+      this.notificationService.show('削除完了', `「${task.title}」を削除しました${result.cleanupPending ? '。添付ファイルの削除は自動で再試行します' : ''}`);
     } catch (e) {
       console.error('タスク削除エラー:', e);
-      this.notificationService.show('エラー', 'タスクの削除に失敗しました');
+      this.notificationService.show('エラー', (e as Error).message || 'タスクの削除に失敗しました');
+    } finally {
+      this.deleteInProgress.set(false);
     }
   }
 

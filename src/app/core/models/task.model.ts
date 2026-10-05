@@ -37,6 +37,7 @@ export interface Task {
 
   recurrence: RecurrenceType | null;
   recurrenceSourceId: string | null;
+  recurrencePreviousTaskId?: string | null;
 }
 
 export type LeavePeriod = 'full' | 'am' | 'pm';
@@ -54,6 +55,7 @@ export interface TeamHoliday {
 
 export interface TeamSettings {
   holidays: TeamHoliday[];
+  _error?: boolean;
 }
 
 export interface Member {

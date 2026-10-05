@@ -27,8 +27,7 @@
               ' (' +
               (member.role === 'manager' ? 'Manager' : 'Member') +
               ') ' +
-              pct +
-              '%'
+              loadLabel(pct)
             "
             [class.selected]="filterAssignee() === member.uid"
             (click)="filterByMember(member.uid)"
@@ -58,8 +57,7 @@
                 ' (' +
                 (member.role === 'manager' ? 'Manager' : 'Member') +
                 ') ' +
-                pct +
-                '%'
+                  loadLabel(pct)
               "
               [class.selected]="filterAssignee() === member.uid"
               (click)="filterByMember(member.uid)"
@@ -132,34 +130,43 @@
                 >
               }
             </div>
-            <span class="member-pct" style="margin-left: 8px; flex-shrink: 0" [class]="level"
-              >{{ pct }}%</span
-            >
+            @if (pct >= 0) {
+              <span class="member-pct" style="margin-left: 8px; flex-shrink: 0" [class]="level"
+                >{{ pct }}%</span
+              >
+            }
           </div>
           <div class="bar-track">
-            <div class="bar-fill" [class]="level" [style.width.%]="pct > 100 ? 100 : pct"></div>
+            <div class="bar-fill" [class]="level" [style.width.%]="pct < 0 ? 0 : pct > 100 ? 100 : pct"></div>
           </div>
           <div class="member-detail">
             {{ tasksService.getMemberFocusTaskCount(member.uid) }}件フォーカス |
             {{ tasksService.getMemberFocusHours(member.uid) }}h /
-            <button class="capacity-btn" (click)="openCapacityEdit(member)">
-              {{ member.weeklyCapacityHours }}h
+            <button
+              class="capacity-btn"
+              [attr.title]="'週あたりの設定時間 ' + member.weeklyCapacityHours + 'h を変更'"
+              (click)="openCapacityEdit(member)"
+            >
+              {{ Math.round(tasksService.getEffectiveCapacity(member.uid, 0) * 10) / 10 }}h
             </button>
             @let myWorkingDays = tasksService.getWorkingDays(member.uid, 0);
             @if (myWorkingDays < 5) {
-              <span class="working-days-badge" title="今週の平日5日から、チーム休日・本人の休暇を除いた稼働日数">稼働 {{ myWorkingDays }}日</span>
+              <span
+                class="working-days-badge"
+                [class.no-working-days]="myWorkingDays === 0"
+                title="今週の平日5日から、チーム休日・本人の休暇を除いた稼働日数"
+              >{{ myWorkingDays === 0 ? '稼働予定なし' : '稼働 ' + myWorkingDays + '日' }}</span>
             }
           </div>
           @if (filterAssignee() === member.uid) {
             <div class="member-forecast">
               @for (hours of tasksService.getMemberWeeklyHours(member.uid); track $index) {
-                @let wdays = tasksService.getWorkingDays(member.uid, $index);
-                @let cap = member.weeklyCapacityHours * (wdays / 5);
-                @let fpct = cap > 0 ? Math.round((hours / cap) * 100) : 0;
+                @let cap = tasksService.getEffectiveCapacity(member.uid, $index);
+                @let fpct = cap > 0 ? Math.round((hours / cap) * 100) : (hours > 0 ? -1 : 0);
                 <div
                   class="mini-bar"
                   [title]="
-                    forecastLabels[$index] + ': ' + hours + 'h / ' + cap + 'h (' + fpct + '%)'
+                    forecastLabels[$index] + ': ' + hours + 'h / ' + Math.round(cap) + 'h (' + loadLabel(fpct) + ')'
                   "
                 >
                   <div class="mini-bar-label">{{ forecastLabels[$index] }}</div>
@@ -167,7 +174,7 @@
                     <div
                       class="mini-bar-fill"
                       [class]="loadLevel(fpct)"
-                      [style.width.%]="fpct > 100 ? 100 : fpct"
+                      [style.width.%]="fpct < 0 ? 0 : fpct > 100 ? 100 : fpct"
                     ></div>
                   </div>
                   <div class="mini-bar-hours">{{ hours }}h</div>
@@ -233,34 +240,43 @@
                   >
                 }
               </div>
-              <span class="member-pct" style="margin-left: 8px; flex-shrink: 0" [class]="level"
-                >{{ pct }}%</span
-              >
+              @if (pct >= 0) {
+                <span class="member-pct" style="margin-left: 8px; flex-shrink: 0" [class]="level"
+                  >{{ pct }}%</span
+                >
+              }
             </div>
             <div class="bar-track">
-              <div class="bar-fill" [class]="level" [style.width.%]="pct > 100 ? 100 : pct"></div>
+              <div class="bar-fill" [class]="level" [style.width.%]="pct < 0 ? 0 : pct > 100 ? 100 : pct"></div>
             </div>
             <div class="member-detail">
               {{ tasksService.getMemberFocusTaskCount(member.uid) }}件フォーカス |
               {{ tasksService.getMemberFocusHours(member.uid) }}h /
-              <button class="capacity-btn" (click)="openCapacityEdit(member)">
-                {{ member.weeklyCapacityHours }}h
+              <button
+                class="capacity-btn"
+                [attr.title]="'週あたりの設定時間 ' + member.weeklyCapacityHours + 'h を変更'"
+                (click)="openCapacityEdit(member)"
+              >
+                {{ Math.round(tasksService.getEffectiveCapacity(member.uid, 0) * 10) / 10 }}h
               </button>
               @let otherWorkingDays = tasksService.getWorkingDays(member.uid, 0);
               @if (otherWorkingDays < 5) {
-                <span class="working-days-badge" title="今週の平日5日から、チーム休日・本人の休暇を除いた稼働日数">稼働 {{ otherWorkingDays }}日</span>
+                <span
+                  class="working-days-badge"
+                  [class.no-working-days]="otherWorkingDays === 0"
+                  title="今週の平日5日から、チーム休日・本人の休暇を除いた稼働日数"
+                >{{ otherWorkingDays === 0 ? '稼働予定なし' : '稼働 ' + otherWorkingDays + '日' }}</span>
               }
             </div>
             @if (filterAssignee() === member.uid) {
               <div class="member-forecast">
                 @for (hours of tasksService.getMemberWeeklyHours(member.uid); track $index) {
-                  @let wdays = tasksService.getWorkingDays(member.uid, $index);
-                  @let cap = member.weeklyCapacityHours * (wdays / 5);
-                  @let fpct = cap > 0 ? Math.round((hours / cap) * 100) : 0;
+                  @let cap2 = tasksService.getEffectiveCapacity(member.uid, $index);
+                  @let fpct = cap2 > 0 ? Math.round((hours / cap2) * 100) : (hours > 0 ? -1 : 0);
                   <div
                     class="mini-bar"
                     [title]="
-                      forecastLabels[$index] + ': ' + hours + 'h / ' + cap + 'h (' + fpct + '%)'
+                      forecastLabels[$index] + ': ' + hours + 'h / ' + Math.round(cap2) + 'h (' + loadLabel(fpct) + ')'
                     "
                   >
                     <div class="mini-bar-label">{{ forecastLabels[$index] }}</div>
@@ -268,7 +284,7 @@
                       <div
                         class="mini-bar-fill"
                         [class]="loadLevel(fpct)"
-                        [style.width.%]="fpct > 100 ? 100 : fpct"
+                        [style.width.%]="fpct < 0 ? 0 : fpct > 100 ? 100 : fpct"
                       ></div>
                     </div>
                     <div class="mini-bar-hours">{{ hours }}h</div>
@@ -727,13 +743,13 @@
       }
 
       @if (bulkDeleting) {
-        <div class="modal-overlay" (click)="bulkDeleting = false">
+        <div class="modal-overlay" (click)="cancelBulkDelete()">
           <div class="modal" (click)="$event.stopPropagation()">
             <h3>{{ bulkSelected().size }}件のタスクを削除しますか？</h3>
-            <p class="modal-sub">選択したタスクとそのサブタスクをすべて削除します。この操作は元に戻せません。</p>
+            <p class="modal-sub">選択したタスクとそのサブタスク、他の人が投稿した添付ファイル・コメント・履歴も削除します。タスクごとに削除し、失敗した場合は残りを再試行できます。この操作は元に戻せません。</p>
             <div class="add-form-actions">
-              <button type="button" (click)="bulkDeleting = false">キャンセル</button>
-              <button type="button" class="confirm danger" (click)="bulkDelete()">削除する</button>
+              <button type="button" [disabled]="deleteInProgress()" (click)="cancelBulkDelete()">キャンセル</button>
+              <button type="button" class="confirm danger" [disabled]="deleteInProgress()" (click)="bulkDelete()">{{ deleteInProgress() ? '削除中…' : '削除する' }}</button>
             </div>
           </div>
         </div>
@@ -916,7 +932,7 @@
                             </svg>
                             <span>編集</span>
                           </button>
-                          @if (canMoveTask(task)) {
+                          @if (tasksService.canDeleteTask(task)) {
                             <button class="delete-btn" (click)="deleteTask(task)" title="削除">
                               ×
                             </button>
@@ -1350,7 +1366,7 @@
                     <option [ngValue]="null">担当者を選ぶ（任意）</option>
                     @for (m of sortedMembers(); track m.uid) {
                       <option [ngValue]="m.uid">
-                        {{ m.name }}（{{ tasksService.getFocusLoadPercent(m.uid) }}%）
+                        {{ m.name }}（{{ loadLabel(tasksService.getFocusLoadPercent(m.uid)) }}）
                       </option>
                     }
                   </select>
@@ -1526,7 +1542,7 @@
                           </svg>
                           <span>編集</span>
                         </button>
-                        @if (canMoveTask(task)) {
+                        @if (tasksService.canDeleteTask(task)) {
                           <button class="delete-btn" (click)="deleteTask(task)" title="削除">
                             ×
                           </button>
@@ -1894,6 +1910,7 @@
                                 </button>
                                 <button
                                   class="delete-btn small"
+                                  [disabled]="!tasksService.canDeleteTask(child)"
                                   (click)="deleteTask(child)"
                                   title="削除"
                                 >
@@ -1951,7 +1968,7 @@
                             <option [ngValue]="null">担当者（未割当）</option>
                             @for (m of sortedMembers(); track m.uid) {
                               <option [ngValue]="m.uid">
-                                {{ m.name }}（{{ tasksService.getFocusLoadPercent(m.uid) }}%）
+                                {{ m.name }}（{{ loadLabel(tasksService.getFocusLoadPercent(m.uid)) }}）
                               </option>
                             }
                           </select>
@@ -2319,6 +2336,7 @@
   <div class="modal-overlay" (click)="cancelDelete()">
     <div class="modal" (click)="$event.stopPropagation()">
       <h3>「{{ deletingTask.title }}」を削除しますか?</h3>
+      <p class="modal-sub">他の人が投稿した添付ファイル・コメント・履歴も削除します。</p>
       @if (deletingChildCount > 0) {
         <p class="modal-sub">子タスク{{ deletingChildCount }}件も一緒に削除されます。</p>
       } @else {
@@ -2326,7 +2344,7 @@
       }
       <div class="add-form-actions">
         <button type="button" (click)="cancelDelete()">キャンセル</button>
-        <button type="button" class="confirm danger" (click)="confirmDelete()">削除する</button>
+        <button type="button" class="confirm danger" [disabled]="deleteInProgress()" (click)="confirmDelete()">{{ deleteInProgress() ? '削除中…' : '削除する' }}</button>
       </div>
     </div>
   </div>
@@ -2376,7 +2394,7 @@
   <div class="modal-overlay" (click)="cancelCapacityEdit()">
     <div class="modal" (click)="$event.stopPropagation()">
       <h3>{{ editingCapacityMember.name }} さん</h3>
-      <p class="modal-sub">１週間の稼働可能時間（h）を変更します</p>
+      <p class="modal-sub">週あたりの設定稼働時間（h）を変更します。休日・休暇分は今週の稼働可能時間から差し引かれます。</p>
       <input type="number" min="1" step="1" [(ngModel)]="capacityInput" class="modal-input" />
       <div class="add-form-actions">
         <button type="button" (click)="cancelCapacityEdit()">キャンセル</button>
@@ -2388,7 +2406,8 @@
 
 @if (editingTask && pendingAdd?.kind !== 'edit') {
   <div class="modal-overlay" (click)="cancelEditTask()">
-    <div class="modal" (click)="$event.stopPropagation()">
+    <div class="modal edit-task-modal" (click)="$event.stopPropagation()">
+      <div class="edit-modal-scroll-content">
       <div class="edit-modal-header">
         <h3>タスクの編集</h3>
         @if (!editingTask.parentId) {
@@ -2573,6 +2592,7 @@
         >
           更新
         </button>
+      </div>
       </div>
     </div>
   </div>

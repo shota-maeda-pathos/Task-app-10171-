@@ -148,13 +148,20 @@
                   (click)="removeHoliday(holiday.date)"
                   [attr.aria-label]="formatHolidayDate(holiday.date) + 'のチーム休日を削除'"
                 >
-                  ×
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 6h18M8 6V4h8v2m3 0-.8 14H5.8L5 6m4 4v6m6-6v6" />
+                  </svg>
                 </button>
               }
             </div>
           }
 
-          @if (teamHolidays().length === 0) {
+          @if (tasksService.teamSettings()?._error) {
+            <div class="leave-empty">
+              <strong>祝日データの読み込みに失敗しました</strong>
+              <p>ネットワーク接続を確認してページを再読み込みしてください。</p>
+            </div>
+          } @else if (teamHolidays().length === 0) {
             <div class="leave-empty">
               <strong>チーム休日はまだ登録されていません</strong>
               <p>祝日や会社の休業日を登録できます。</p>
@@ -193,28 +200,36 @@
                 ＋ 休日を追加
               </button>
               @if (holidayEditorOpen()) {
-                <div id="holiday-editor-form" class="holiday-add-form">
-                  <input
-                    #holidayDateRef
-                    type="date"
-                    [(ngModel)]="newHolidayDate"
-                    aria-label="日付"
-                    class="holiday-date-input"
-                    (click)="holidayDateRef.showPicker?.()"
-                  />
-                  <input
-                    type="text"
-                    [(ngModel)]="newHolidayName"
-                    aria-label="休日名"
-                    placeholder="休日名"
-                    class="holiday-name-input"
-                  />
+                <div id="holiday-editor-form" class="holiday-add-form team-holiday-form">
+                  <label class="holiday-form-field">
+                    <span>日付</span>
+                    <input
+                      #holidayDateRef
+                      type="date"
+                      [(ngModel)]="newHolidayDate"
+                      aria-label="日付"
+                      class="holiday-date-input"
+                      [attr.disabled]="saving() ? '' : null"
+                      (click)="holidayDateRef.showPicker?.()"
+                    />
+                  </label>
+                  <label class="holiday-form-field">
+                    <span>休日名</span>
+                    <input
+                      type="text"
+                      [(ngModel)]="newHolidayName"
+                      aria-label="休日名"
+                      placeholder="休日名"
+                      class="holiday-name-input"
+                      [attr.disabled]="saving() ? '' : null"
+                    />
+                  </label>
                   <button
                     class="add-btn"
-                    [disabled]="!newHolidayDate || !newHolidayName.trim()"
+                    [disabled]="!newHolidayDate || !newHolidayName.trim() || saving()"
                     (click)="addHoliday()"
                   >
-                    追加
+                    {{ saving() ? '保存中…' : '追加' }}
                   </button>
                 </div>
               }
@@ -259,7 +274,9 @@
                 (click)="removeMyLeave(leave.date)"
                 [attr.aria-label]="formatHolidayDate(leave.date) + 'の休暇を削除'"
               >
-                ×
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M3 6h18M8 6V4h8v2m3 0-.8 14H5.8L5 6m4 4v6m6-6v6" />
+                </svg>
               </button>
             </div>
           }
@@ -282,46 +299,62 @@
               ＋ 休暇を追加
             </button>
             @if (leaveEditorOpen()) {
-              <div id="leave-editor-form" class="holiday-add-form">
-                <input
-                  #leaveStartRef
-                  type="date"
-                  [(ngModel)]="newLeaveStartDate"
-                  aria-label="開始日"
-                  class="holiday-date-input"
-                  (click)="leaveStartRef.showPicker?.()"
-                />
+              <div id="leave-editor-form" class="holiday-add-form own-leave-form">
+                <label class="holiday-form-field">
+                  <span>開始日 <small>必須</small></span>
+                  <input
+                    #leaveStartRef
+                    type="date"
+                    [(ngModel)]="newLeaveStartDate"
+                    aria-label="開始日"
+                    class="holiday-date-input"
+                    [attr.disabled]="saving() ? '' : null"
+                    (click)="leaveStartRef.showPicker?.()"
+                  />
+                </label>
                 <span class="date-separator">〜</span>
-                <input
-                  #leaveEndRef
-                  type="date"
-                  [(ngModel)]="newLeaveEndDate"
-                  aria-label="終了日（空欄なら開始日のみ）"
-                  class="holiday-date-input"
-                  (click)="leaveEndRef.showPicker?.()"
-                  placeholder="同日なら空欄"
-                />
-                <input
-                  type="text"
-                  [(ngModel)]="newLeaveLabel"
-                  aria-label="休暇名"
-                  placeholder="有給"
-                  class="holiday-name-input"
-                />
-<div class="leave-period-menu">
-  <button type="button" class="leave-period-control" aria-label="休暇区分" aria-haspopup="true" [attr.aria-expanded]="leavePeriodMenu() === 'own'" (click)="leavePeriodMenu.set(leavePeriodMenu() === 'own' ? null : 'own')">{{ periodName(newLeavePeriod) }} <span aria-hidden="true">▾</span></button>
-  @if (leavePeriodMenu() === 'own') {
-    <div class="leave-period-options" role="group" aria-label="休暇区分の選択肢">
-      @for (option of leavePeriodOptions; track option.value) {
-        <button type="button" [class.selected]="newLeavePeriod === option.value" [attr.aria-pressed]="newLeavePeriod === option.value" (click)="selectLeavePeriod('own', option.value)">{{ option.label }}</button>
-      }
-    </div>
-  }
-</div>
-                <button class="add-btn" [disabled]="!newLeaveStartDate" (click)="addMyLeave()">
-                  追加
+                <label class="holiday-form-field">
+                  <span>終了日</span>
+                  <input
+                    #leaveEndRef
+                    type="date"
+                    [(ngModel)]="newLeaveEndDate"
+                    aria-label="終了日（空欄なら開始日のみ）"
+                    class="holiday-date-input"
+                    [attr.disabled]="saving() ? '' : null"
+                    (click)="leaveEndRef.showPicker?.()"
+                    placeholder="同日なら空欄"
+                  />
+                </label>
+                <label class="holiday-form-field">
+                  <span>休暇名</span>
+                  <input
+                    type="text"
+                    [(ngModel)]="newLeaveLabel"
+                    aria-label="休暇名"
+                    placeholder="有給"
+                    class="holiday-name-input"
+                    [attr.disabled]="saving() ? '' : null"
+                  />
+                </label>
+                <div class="holiday-form-field">
+                  <span>取得単位</span>
+                  <div class="leave-period-menu">
+                    <button type="button" class="leave-period-control" aria-label="休暇区分" aria-haspopup="true" [attr.disabled]="saving() ? '' : null" [attr.aria-expanded]="leavePeriodMenu() === 'own'" (click)="leavePeriodMenu.set(leavePeriodMenu() === 'own' ? null : 'own')">{{ periodName(newLeavePeriod) }} <span aria-hidden="true">▾</span></button>
+                    @if (leavePeriodMenu() === 'own') {
+                      <div class="leave-period-options" role="group" aria-label="休暇区分の選択肢">
+                        @for (option of leavePeriodOptions; track option.value) {
+                          <button type="button" [attr.disabled]="saving() ? '' : null" [class.selected]="newLeavePeriod === option.value" [attr.aria-pressed]="newLeavePeriod === option.value" (click)="selectLeavePeriod('own', option.value)">{{ option.label }}</button>
+                        }
+                      </div>
+                    }
+                  </div>
+                </div>
+                <button class="add-btn" [disabled]="!newLeaveStartDate || saving()" (click)="addMyLeave()">
+                  {{ saving() ? '保存中…' : '追加' }}
                 </button>
               </div>
+              <p class="own-leave-form-hint">終了日を省略すると、開始日のみ（1日分）を登録します。</p>
             }
           </div>
           <p class="leave-hint">
@@ -489,7 +522,9 @@
                         "
                         (click)="removeMemberLeave(member.uid, leave.date)"
                       >
-                        ✕
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M3 6h18M8 6V4h8v2m3 0-.8 14H5.8L5 6m4 4v6m6-6v6" />
+                        </svg>
                       </button>
                     </div>
                   }
@@ -497,19 +532,19 @@
                     <div class="member-leave-add-form member-leave-panel">
   <h4 class="member-leave-form-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18"/></svg>休暇を追加</h4>
   <div class="member-leave-dates">
-    <label class="member-leave-field"><span>開始日 <small>必須</small></span><input type="date" [(ngModel)]="memberLeaveStartDate" aria-label="開始日" class="holiday-date-input" (click)="$any($event.target).showPicker?.()" /></label>
+    <label class="member-leave-field"><span>開始日 <small>必須</small></span><input type="date" [(ngModel)]="memberLeaveStartDate" aria-label="開始日" class="holiday-date-input" [attr.disabled]="saving() ? '' : null" (click)="$any($event.target).showPicker?.()" /></label>
     <span class="date-separator" aria-hidden="true">〜</span>
-    <label class="member-leave-field"><span>終了日</span><input type="date" [(ngModel)]="memberLeaveEndDate" aria-label="終了日（空欄なら開始日のみ）" class="holiday-date-input" (click)="$any($event.target).showPicker?.()" /></label>
+    <label class="member-leave-field"><span>終了日</span><input type="date" [(ngModel)]="memberLeaveEndDate" aria-label="終了日（空欄なら開始日のみ）" class="holiday-date-input" [attr.disabled]="saving() ? '' : null" (click)="$any($event.target).showPicker?.()" /></label>
   </div>
   <div class="member-leave-description">
-    <label class="member-leave-field"><span>休暇名</span><input type="text" [(ngModel)]="memberLeaveLabel" aria-label="休暇名" placeholder="有給" class="holiday-name-input" /></label>
+    <label class="member-leave-field"><span>休暇名</span><input type="text" [(ngModel)]="memberLeaveLabel" aria-label="休暇名" placeholder="有給" class="holiday-name-input" [attr.disabled]="saving() ? '' : null" /></label>
     <div class="member-leave-field"><span>取得単位</span>
       <div class="leave-period-menu">
-        <button type="button" class="leave-period-control" aria-label="休暇区分" aria-haspopup="true" [attr.aria-expanded]="leavePeriodMenu() === member.uid" (click)="leavePeriodMenu.set(leavePeriodMenu() === member.uid ? null : member.uid)">{{ periodName(memberLeavePeriod) }} <span aria-hidden="true">▾</span></button>
+        <button type="button" class="leave-period-control" aria-label="休暇区分" aria-haspopup="true" [attr.disabled]="saving() ? '' : null" [attr.aria-expanded]="leavePeriodMenu() === member.uid" (click)="leavePeriodMenu.set(leavePeriodMenu() === member.uid ? null : member.uid)">{{ periodName(memberLeavePeriod) }} <span aria-hidden="true">▾</span></button>
         @if (leavePeriodMenu() === member.uid) {
           <div class="leave-period-options" role="group" aria-label="休暇区分の選択肢">
             @for (option of leavePeriodOptions; track option.value) {
-              <button type="button" [class.selected]="memberLeavePeriod === option.value" [attr.aria-pressed]="memberLeavePeriod === option.value" (click)="selectLeavePeriod(member.uid, option.value)">{{ option.label }}</button>
+              <button type="button" [attr.disabled]="saving() ? '' : null" [class.selected]="memberLeavePeriod === option.value" [attr.aria-pressed]="memberLeavePeriod === option.value" (click)="selectLeavePeriod(member.uid, option.value)">{{ option.label }}</button>
             }
           </div>
         }
@@ -520,8 +555,8 @@
   <div class="member-leave-form-footer">
     <span>{{ memberLeaveStartDate ? '日付と取得単位を確認してください' : '期間を選択してください' }}</span>
     <div class="member-leave-form-actions">
-      <button type="button" class="cancel-btn-sm" aria-label="休暇の追加をキャンセル" (click)="addMemberLeaveTarget = null; leavePeriodMenu.set(null)">キャンセル</button>
-      <button type="button" class="add-btn" [disabled]="!memberLeaveStartDate" (click)="addMemberLeave()">追加する</button>
+      <button type="button" class="cancel-btn-sm" aria-label="休暇の追加をキャンセル" [attr.disabled]="saving() ? '' : null" (click)="addMemberLeaveTarget = null; leavePeriodMenu.set(null)">キャンセル</button>
+      <button type="button" class="add-btn" [disabled]="!memberLeaveStartDate || saving()" (click)="addMemberLeave()">{{ saving() ? '保存中…' : '追加する' }}</button>
     </div>
   </div>
 </div>
@@ -607,7 +642,9 @@
                         "
                         (click)="removeMemberLeave(member.uid, leave.date)"
                       >
-                        ✕
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M3 6h18M8 6V4h8v2m3 0-.8 14H5.8L5 6m4 4v6m6-6v6" />
+                        </svg>
                       </button>
                     </div>
                   }
@@ -615,19 +652,19 @@
                     <div class="member-leave-add-form member-leave-panel">
   <h4 class="member-leave-form-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18"/></svg>休暇を追加</h4>
   <div class="member-leave-dates">
-    <label class="member-leave-field"><span>開始日 <small>必須</small></span><input type="date" [(ngModel)]="memberLeaveStartDate" aria-label="開始日" class="holiday-date-input" (click)="$any($event.target).showPicker?.()" /></label>
+    <label class="member-leave-field"><span>開始日 <small>必須</small></span><input type="date" [(ngModel)]="memberLeaveStartDate" aria-label="開始日" class="holiday-date-input" [attr.disabled]="saving() ? '' : null" (click)="$any($event.target).showPicker?.()" /></label>
     <span class="date-separator" aria-hidden="true">〜</span>
-    <label class="member-leave-field"><span>終了日</span><input type="date" [(ngModel)]="memberLeaveEndDate" aria-label="終了日（空欄なら開始日のみ）" class="holiday-date-input" (click)="$any($event.target).showPicker?.()" /></label>
+    <label class="member-leave-field"><span>終了日</span><input type="date" [(ngModel)]="memberLeaveEndDate" aria-label="終了日（空欄なら開始日のみ）" class="holiday-date-input" [attr.disabled]="saving() ? '' : null" (click)="$any($event.target).showPicker?.()" /></label>
   </div>
   <div class="member-leave-description">
-    <label class="member-leave-field"><span>休暇名</span><input type="text" [(ngModel)]="memberLeaveLabel" aria-label="休暇名" placeholder="有給" class="holiday-name-input" /></label>
+    <label class="member-leave-field"><span>休暇名</span><input type="text" [(ngModel)]="memberLeaveLabel" aria-label="休暇名" placeholder="有給" class="holiday-name-input" [attr.disabled]="saving() ? '' : null" /></label>
     <div class="member-leave-field"><span>取得単位</span>
       <div class="leave-period-menu">
-        <button type="button" class="leave-period-control" aria-label="休暇区分" aria-haspopup="true" [attr.aria-expanded]="leavePeriodMenu() === member.uid" (click)="leavePeriodMenu.set(leavePeriodMenu() === member.uid ? null : member.uid)">{{ periodName(memberLeavePeriod) }} <span aria-hidden="true">▾</span></button>
+        <button type="button" class="leave-period-control" aria-label="休暇区分" aria-haspopup="true" [attr.disabled]="saving() ? '' : null" [attr.aria-expanded]="leavePeriodMenu() === member.uid" (click)="leavePeriodMenu.set(leavePeriodMenu() === member.uid ? null : member.uid)">{{ periodName(memberLeavePeriod) }} <span aria-hidden="true">▾</span></button>
         @if (leavePeriodMenu() === member.uid) {
           <div class="leave-period-options" role="group" aria-label="休暇区分の選択肢">
             @for (option of leavePeriodOptions; track option.value) {
-              <button type="button" [class.selected]="memberLeavePeriod === option.value" [attr.aria-pressed]="memberLeavePeriod === option.value" (click)="selectLeavePeriod(member.uid, option.value)">{{ option.label }}</button>
+              <button type="button" [attr.disabled]="saving() ? '' : null" [class.selected]="memberLeavePeriod === option.value" [attr.aria-pressed]="memberLeavePeriod === option.value" (click)="selectLeavePeriod(member.uid, option.value)">{{ option.label }}</button>
             }
           </div>
         }
@@ -638,8 +675,8 @@
   <div class="member-leave-form-footer">
     <span>{{ memberLeaveStartDate ? '日付と取得単位を確認してください' : '期間を選択してください' }}</span>
     <div class="member-leave-form-actions">
-      <button type="button" class="cancel-btn-sm" aria-label="休暇の追加をキャンセル" (click)="addMemberLeaveTarget = null; leavePeriodMenu.set(null)">キャンセル</button>
-      <button type="button" class="add-btn" [disabled]="!memberLeaveStartDate" (click)="addMemberLeave()">追加する</button>
+      <button type="button" class="cancel-btn-sm" aria-label="休暇の追加をキャンセル" [attr.disabled]="saving() ? '' : null" (click)="addMemberLeaveTarget = null; leavePeriodMenu.set(null)">キャンセル</button>
+      <button type="button" class="add-btn" [disabled]="!memberLeaveStartDate || saving()" (click)="addMemberLeave()">{{ saving() ? '保存中…' : '追加する' }}</button>
     </div>
   </div>
 </div>
@@ -679,7 +716,7 @@
       <h3>{{ deletingMember.name }}さんを削除しますか？</h3>
       <p class="delete-warning">
         このメンバーをチームから削除します。<br />
-        担当タスクは「未割り当て」になります。この操作は元に戻せません。
+        担当タスクは「未割り当て」になります。削除後は「削除済みメンバー」から復帰できます。
       </p>
       <div class="modal-actions delete-confirm-actions">
         <button (click)="cancelDelete()">キャンセル</button>

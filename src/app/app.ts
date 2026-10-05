@@ -252,7 +252,7 @@ import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/model
                   <option [ngValue]="null">担当者を選ぶ（任意）</option>
                   @for (m of tasksService.members(); track m.uid) {
                     <option [ngValue]="m.uid">
-                      {{ m.name }}（{{ tasksService.getFocusLoadPercent(m.uid) }}%）
+                      {{ m.name }}（{{ tasksService.getFocusLoadPercent(m.uid) < 0 ? '稼働予定なし' : tasksService.getFocusLoadPercent(m.uid) + '%' }}）
                     </option>
                   }
                 </select>

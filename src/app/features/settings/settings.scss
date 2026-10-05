@@ -1248,13 +1248,16 @@
         }
 
         .leave-remove-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             background: none;
             border: none;
             color: var(--muted);
             cursor: pointer;
-            font-size: 11px;
             padding: 2px 4px;
             line-height: 1;
+            svg { width: 16px; height: 16px; }
 
             &:hover {
                 color: var(--danger);
@@ -1441,7 +1444,9 @@
 .own-leave-info strong { font-size: 15px; font-weight: 600; }
 .leave-remove {
   flex-shrink: 0; width: 32px; height: 32px; border: 0;
-  background: transparent; color: var(--muted); border-radius: 6px; font-size: 20px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; color: var(--muted); border-radius: 6px;
+  svg { width: 16px; height: 16px; }
   &:hover { color: var(--danger); background: rgba(var(--danger-rgb), .08); }
 }
 .leave-empty {
@@ -1472,17 +1477,63 @@
   .holiday-name-input { flex: 1 1 110px; width: 110px; }
   .add-btn { min-height: 36px; padding: 7px 12px; }
 }
+.leave-settings .holiday-add-form .holiday-form-field {
+  display: flex;
+  flex: 1 1 140px;
+  min-width: 120px;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 12px;
+}
+.leave-settings .holiday-add-form .holiday-form-field small {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.leave-settings .holiday-add-form .holiday-date-input,
+.leave-settings .holiday-add-form .holiday-name-input {
+  flex: 0 0 auto;
+  width: 100%;
+  height: 38px;
+  min-height: 38px;
+}
+.leave-settings .holiday-add-form > .add-btn {
+  align-self: flex-end;
+}
+.leave-settings .own-leave-form .holiday-form-field {
+  flex-basis: 130px;
+}
+.leave-settings .own-leave-form .date-separator {
+  align-self: flex-end;
+  padding-bottom: 10px;
+}
+.leave-settings .own-leave-form .leave-period-menu {
+  width: 100%;
+}
+.leave-settings .own-leave-form .leave-period-control {
+  width: 100%;
+  min-height: 38px;
+  height: 38px;
+  padding: 8px 10px;
+}
+.own-leave-form-hint {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
 .member-settings {
   .member-list { gap: 12px; }
   .member-row { border-radius: 11px; padding: 10px 18px; row-gap: 0; }
-  .member-info { min-width: 0; flex: 1; }
+  .member-info { min-width: 0; flex: 1 1 200px; }
   .member-detail { min-width: 0; }
   .member-name { font-weight: 600; overflow-wrap: anywhere; }
   .role-chip { border-radius: 5px; }
   .member-actions button { min-height: 36px; }
   .member-leaves {
     flex-basis: 100%; min-width: 0; width: 100%;
-    margin: 0 0 0 48px; padding: 0;
+    margin: 0; padding: 0;
     border-top: 0;
     .member-leaves-toggle {
       display: flex; align-items: center; justify-content: space-between; gap: 8px;

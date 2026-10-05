@@ -1,10 +1,35 @@
 const { onDocumentCreated } = require('firebase-functions/v2/firestore');
 const admin = require('firebase-admin');
+const { onCall } = require('firebase-functions/v2/https');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { deleteTaskAtomically, cleanupDeletedTask } = require('./task-deletion');
 
 admin.initializeApp();
 
 const db = admin.firestore();
 const messaging = admin.messaging();
+
+exports.deleteTaskSafely = onCall({ region: 'asia-northeast1', timeoutSeconds: 120 }, async request => {
+  const result = await deleteTaskAtomically(db, request.data?.taskId, request.auth?.uid);
+  let cleanupPending = true;
+  try {
+    cleanupPending = !(await cleanupDeletedTask(db, admin.storage().bucket(), result.jobId));
+  } catch (error) {
+    console.error('Task file cleanup deferred', result.jobId, error.code ?? 'unknown');
+  }
+  return { ...result, cleanupPending };
+});
+
+exports.retryTaskFileCleanup = onSchedule({ schedule: 'every 5 minutes', region: 'asia-northeast1', timeoutSeconds: 300 }, async () => {
+  const jobs = await db.collection('taskDeletionJobs').where('nextAttemptAt', '<=', admin.firestore.Timestamp.now()).orderBy('nextAttemptAt').limit(10).get();
+  for (const job of jobs.docs) {
+    try {
+      await cleanupDeletedTask(db, admin.storage().bucket(), job.id);
+    } catch (error) {
+      console.error('Task file cleanup failed', job.id, error.code ?? 'unknown');
+    }
+  }
+});
 
 exports.onCommentCreated = onDocumentCreated(
   {

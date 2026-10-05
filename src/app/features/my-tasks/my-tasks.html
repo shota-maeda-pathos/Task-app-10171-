@@ -7,9 +7,9 @@
         />
         <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
       </svg>
-      My Tasks
+      {{ pageTitle() }}
     </h1>
-    <p class="sub">自分の進捗とタスクを一覧で確認できます。</p>
+    <p class="sub">{{ pageDescription() }}</p>
   </div>
 
   <div class="summary-grid">
@@ -24,17 +24,23 @@
       </div>
       <div class="summary-metric">
         <span class="summary-value" [ngClass]="loadLevel(focusLoadPct())">
-          {{ focusLoadPct() }}<span class="summary-unit">%</span>
+          @if (!hasAssigneeMetrics()) {
+            —
+          } @else if (focusLoadPct() < 0) {
+            {{ loadLabel(focusLoadPct()) }}
+          } @else {
+            {{ focusLoadPct() }}<span class="summary-unit">%</span>
+          }
         </span>
       </div>
       <div class="summary-progress-track" aria-hidden="true">
         <div
           class="summary-progress-fill"
           [ngClass]="loadLevel(focusLoadPct())"
-          [style.width.%]="Math.min(focusLoadPct(), 100)"
+          [style.width.%]="focusLoadPct() < 0 ? 0 : Math.min(focusLoadPct(), 100)"
         ></div>
       </div>
-      <span class="summary-sub">{{ focusHours() }}h / {{ weeklyCapacity() }}h</span>
+      <span class="summary-sub">@if (hasAssigneeMetrics()) { {{ focusHours() }}h / {{ weeklyCapacity() }}h } @else { 担当者がいないため対象外 }</span>
     </div>
     <div class="summary-card summary-card-focus">
       <div class="summary-heading">
@@ -46,9 +52,9 @@
         <span class="summary-label">フォーカスの残り</span>
       </div>
       <div class="summary-metric">
-        <span class="summary-value">{{ remainingFocusHours() }}<span class="summary-unit">h</span></span>
+        <span class="summary-value">@if (hasAssigneeMetrics()) { {{ remainingFocusHours() }}<span class="summary-unit">h</span> } @else { — }</span>
       </div>
-      <span class="summary-sub">今週やる {{ focusTaskCount() }}件 / {{ weeklyCapacity() }}h</span>
+      <span class="summary-sub">@if (hasAssigneeMetrics()) { 今週やる {{ focusTaskCount() }}件 / {{ weeklyCapacity() }}h } @else { 担当者がいないため対象外 }</span>
     </div>
     <div
       class="summary-card summary-card-alert"
@@ -104,7 +110,7 @@
           <line x1="12" y1="20" x2="12" y2="4" />
           <line x1="6" y1="20" x2="6" y2="14" />
         </svg>
-        進捗
+        {{ selectedAssigneeHeading() }}の進捗
       </span>
       <span class="progress-pct">{{ progressPct() }}%</span>
     </div>
@@ -125,23 +131,25 @@
         <line x1="3" y1="10" x2="21" y2="10" />
         <polyline points="7 16 10 13 13 15 17 12" />
       </svg>
-      今後4週間の負荷予測
+      {{ selectedAssigneeHeading() }}の今後4週間の負荷予測
     </div>
     <div class="forecast-bars">
       @for (hours of forecastWeekly(); track $index) {
-        @let cap = weeklyCapacity();
-        @let pct = cap > 0 ? Math.round((hours / cap) * 100) : 0;
+        @let cap = getWeekCapacity($index);
+        @let pct = cap > 0 ? Math.round((hours / cap) * 100) : (hours > 0 ? -1 : 0);
         <div class="forecast-week">
           <div class="forecast-label">{{ forecastLabels[$index] }}</div>
           <div class="forecast-bar-track">
             <div
               class="forecast-bar-fill"
               [class]="loadLevel(pct)"
-              [style.width.%]="pct > 100 ? 100 : pct"
+              [style.width.%]="pct < 0 ? 0 : pct > 100 ? 100 : pct"
             ></div>
           </div>
           <div class="forecast-detail">
-            {{ hours }}h <span class="forecast-pct" [class]="loadLevel(pct)">({{ pct }}%)</span>
+            @if (hasAssigneeMetrics()) {
+              {{ hours }}h <span class="forecast-pct" [class]="loadLevel(pct)">({{ loadLabel(pct) }})</span>
+            } @else { — }
           </div>
         </div>
       }
@@ -184,9 +192,10 @@
       </button>
     </div>
 
+    @if (isManager()) {
     <select
       class="assignee-filter"
-      [value]="filterAssignee()"
+      [value]="effectiveAssigneeFilter()"
       (change)="filterAssignee.set($any($event.target).value)"
     >
       <option value="">自分</option>
@@ -197,6 +206,7 @@
       }
       <option value="unassigned">未割当</option>
     </select>
+    }
 
     <label class="focus-filter-check" (click)="$event.stopPropagation()">
       <input
@@ -409,7 +419,7 @@
           <line x1="8" y1="18" x2="8" y2="18" />
           <line x1="12" y1="18" x2="12" y2="18" />
         </svg>
-        締切カレンダー
+        {{ selectedAssigneeHeading() }}の締切カレンダー
       </h3>
       <div class="calendar-nav">
         <button type="button" (click)="monthOffset.set(monthOffset() - 1)">← 前へ</button>
@@ -497,6 +507,14 @@
       }}</span>
     </div>
     <div class="card-meta">
+      <span class="assignee-label" [attr.aria-label]="'担当：' + getMemberName(task.assigneeId)">
+        @if (task.assigneeId) {
+          <span class="avatar small" [style.background]="getMemberColor(task.assigneeId)">
+            {{ getMemberName(task.assigneeId).charAt(0) }}
+          </span>
+        }
+        <span>{{ getMemberName(task.assigneeId) }}</span>
+      </span>
       @if (task.estimatedHours) {
         <span class="meta-chip time">{{ task.estimatedHours }}h</span>
       }
@@ -860,11 +878,6 @@
   <div class="modal-overlay" (click)="closeCalTask()">
     <div class="task-preview" (click)="$event.stopPropagation()">
       <div class="preview-header">
-        <span
-          class="preview-priority"
-          [style.background]="priorityColor(selectedCalTask.priority)"
-          >{{ priorityLabel(selectedCalTask.priority ?? '') }}</span
-        >
         <button class="preview-close" (click)="closeCalTask()">✕</button>
       </div>
       <h3 class="preview-title">{{ selectedCalTask.title }}</h3>
@@ -891,16 +904,73 @@
           <span class="preview-label">締切</span>
           <span class="preview-val">{{ formatDueDateFull(selectedCalTask) }}</span>
         </div>
+        @if (selectedCalTask.priority) {
+          <div class="preview-row">
+            <span class="preview-label">優先度</span>
+            <span class="preview-val">
+              <span class="meta-chip priority-{{ selectedCalTask.priority }}">
+                {{ priorityLabel(selectedCalTask.priority) }}
+              </span>
+            </span>
+          </div>
+        }
         <div class="preview-row">
           <span class="preview-label">見積もり</span>
           <span class="preview-val">{{ selectedCalTask.estimatedHours || 0 }}h</span>
         </div>
+        @if (selectedCalTask.actualHours) {
+          <div class="preview-row">
+            <span class="preview-label">実績</span>
+            <span class="preview-val">{{ selectedCalTask.actualHours }}h</span>
+          </div>
+        }
         <div class="preview-row">
           <span class="preview-label">ステータス</span>
           <span class="preview-val">{{ selectedCalTask.status }}</span>
         </div>
       </div>
-      <button class="preview-go-btn" (click)="goToTask(selectedCalTask.id)">ボードで見る →</button>
+      @if (getSubtasks(selectedCalTask.id); as subtasks) {
+        @if (subtasks.length > 0) {
+          <div class="preview-subtasks">
+            <button class="subtasks-toggle" type="button" (click)="previewSubtasksOpen = !previewSubtasksOpen">
+              <span>サブタスク {{ subtasks.length }}件</span>
+              <svg
+                class="subtasks-chevron"
+                [class.collapsed]="!previewSubtasksOpen"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                width="14"
+                height="14"
+              >
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+            @if (previewSubtasksOpen) {
+              <div class="preview-subtask-list">
+                @for (sub of subtasks; track sub.id) {
+                  <div class="preview-subtask-row">
+                    <span class="preview-subtask-status" [class.done]="sub.status === '完了'">
+                      @if (sub.status === '完了') {
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" width="10" height="10">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      }
+                    </span>
+                    <span class="preview-subtask-title">{{ sub.title }}</span>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+      }
+      @if (selectedCalTask.status !== 'アーカイブ済み') {
+        <button class="preview-go-btn" (click)="goToTask(selectedCalTask.id)">ボードで見る →</button>
+      }
     </div>
   </div>
 }

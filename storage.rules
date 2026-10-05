@@ -1,11 +1,23 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    match /task-attachments/{taskId}/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth != null
+    function isActiveMember() {
+      return request.auth != null
+        && firestore.get(/databases/(default)/documents/members/$(request.auth.uid)).data.get('disabled', false) == false;
+    }
+    // New uploads are scoped to their author's UID. Overwriting is prohibited.
+    match /task-attachments/{taskId}/{authorId}/{fileName} {
+      allow read: if isActiveMember();
+      allow create: if isActiveMember() && request.auth.uid == authorId
+        && firestore.exists(/databases/(default)/documents/tasks/$(taskId))
         && request.resource.size <= 10 * 1024 * 1024;
-      allow delete: if request.auth != null;
+      allow delete: if isActiveMember() && request.auth.uid == authorId;
+    }
+    // Existing flat paths use an owner claim validated by Firestore rules.
+    match /task-attachments/{taskId}/{fileName} {
+      allow read: if isActiveMember();
+      allow delete: if isActiveMember()
+        && firestore.get(/databases/(default)/documents/tasks/$(taskId)/attachmentOwners/$(fileName)).data.authorId == request.auth.uid;
     }
   }
 }

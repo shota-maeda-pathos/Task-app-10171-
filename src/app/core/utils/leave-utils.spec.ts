@@ -19,7 +19,7 @@ describe('half-day leave', () => {
   it('adjusts weekly capacity by half a day and avoids double subtraction on holidays', () => {
     const date = formatDateString(getWeekMonday(new Date()));
     const member = { uid: 'self', weeklyCapacityHours: 40, leaves: [{ date, label: '有給', period: 'am' }] } as Member;
-    const context = { members: () => [member], teamSettings: () => ({ holidays: [] }), getMemberFocusHours: () => 36, getWorkingDays: TasksService.prototype.getWorkingDays } as unknown as TasksService;
+    const context = { members: () => [member], teamSettings: () => ({ holidays: [] }), getMemberFocusHours: () => 36, getWorkingDays: TasksService.prototype.getWorkingDays, getEffectiveCapacity: TasksService.prototype.getEffectiveCapacity } as unknown as TasksService;
     expect(context.getWorkingDays('self', 0)).toBe(4.5);
     expect(TasksService.prototype.getFocusLoadPercent.call(context, 'self')).toBe(100);
     context.teamSettings = (() => ({ holidays: [{ date, name: '休日' }] })) as any;

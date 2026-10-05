@@ -240,6 +240,10 @@
     font-weight: 600;
 }
 
+.working-days-badge.no-working-days {
+    font-size: 8px;
+}
+
 .member-forecast {
     display: flex;
     gap: 3px;
@@ -2002,7 +2006,37 @@
     padding: 28px 32px;
     max-width: 400px;
     width: 90%;
+    box-sizing: border-box;
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
     box-shadow: 0 12px 40px rgba(var(--ink-rgb), 0.18);
+
+    &::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    &::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        background: var(--line);
+        background-clip: content-box;
+        border: 2px solid transparent;
+        border-radius: 999px;
+    }
+
+    &::-webkit-scrollbar-button {
+        display: none;
+        width: 0;
+        height: 0;
+        -webkit-appearance: none;
+    }
 
     h3 {
         font-size: 15px;
@@ -2012,6 +2046,21 @@
         align-items: center;
         gap: 6px;
     }
+}
+
+.edit-task-modal {
+    overflow: hidden;
+}
+
+.edit-modal-scroll-content {
+    max-height: calc(100vh - 88px);
+    max-height: calc(100dvh - 88px);
+    margin-right: -24px;
+    padding-right: 24px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
 }
 
 .modal-sub {

@@ -819,9 +819,20 @@
 /* ── Meta Chips ── */
 .card-meta {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
+}
+
+.assignee-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.6;
+  white-space: nowrap;
 }
 
 .meta-chip {
@@ -1625,7 +1636,7 @@
 
 .preview-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   margin-bottom: 12px;
 }
@@ -1693,8 +1704,77 @@
   gap: 6px;
 }
 
+.task-preview .meta-chip {
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.preview-subtasks {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.task-preview .subtasks-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.subtasks-chevron {
+  transition: transform 0.2s;
+
+  &.collapsed {
+    transform: rotate(-90deg);
+  }
+}
+
+.preview-subtask-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preview-subtask-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.preview-subtask-status {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  &.done {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+}
+
+.preview-subtask-title {
+  min-width: 0;
+}
+
 .preview-go-btn {
   width: 100%;
+  margin-top: 6px;
   padding: 8px;
   border-radius: 6px;
   font-size: 0.82rem;

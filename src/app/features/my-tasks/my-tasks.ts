@@ -42,6 +42,36 @@ export class MyTasksComponent {
   searchQuery = signal('');
   filterFocus = signal(false);
   filterAssignee = signal<string>('');
+  effectiveAssigneeFilter = computed(() => this.isManager() ? this.filterAssignee() : '');
+  hasAssigneeMetrics = computed(() => this.effectiveAssigneeFilter() !== 'unassigned');
+  selectedAssigneeLabel = computed(() => {
+    const filter = this.effectiveAssigneeFilter();
+    if (filter === 'unassigned') return '未割当';
+    const memberId = filter || this.auth.currentUser()?.uid;
+    if (!memberId) return '自分';
+    return this.tasksService.members().find((member) => member.uid === memberId)?.name ?? '自分';
+  });
+  selectedAssigneeHeading = computed(() =>
+    this.effectiveAssigneeFilter() === 'unassigned'
+      ? '未割当タスク'
+      : `${this.selectedAssigneeLabel()}さん`,
+  );
+  pageTitle = computed(() => {
+    if (this.effectiveAssigneeFilter() === 'unassigned') return '未割当のタスク';
+    if (this.effectiveAssigneeFilter()) return `${this.selectedAssigneeLabel()}さんのタスク`;
+    return 'My Tasks';
+  });
+  pageDescription = computed(() => {
+    if (this.effectiveAssigneeFilter() === 'unassigned') return '未割当タスクの進捗と一覧を確認できます。';
+    if (this.effectiveAssigneeFilter()) return `${this.selectedAssigneeLabel()}さんの進捗とタスクを一覧で確認できます。`;
+    return '自分の進捗とタスクを一覧で確認できます。';
+  });
+  private metricsUid = computed(() => {
+    const filter = this.effectiveAssigneeFilter();
+    if (filter === 'unassigned') return '';
+    if (filter) return filter;
+    return this.auth.currentUser()?.uid ?? '';
+  });
   pendingFocusTaskId = signal<string | null>(null);
   focusHoursDraft = signal<number | null>(null);
   @ViewChild('focusPopover', { static: true }) private focusPopover!: ElementRef<HTMLFormElement>;
@@ -113,12 +143,12 @@ export class MyTasksComponent {
   myTasks = computed(() => {
     const uid = this.auth.currentUser()?.uid;
     if (!uid) return [];
-    const assigneeFilter = this.filterAssignee();
+    const assigneeFilter = this.effectiveAssigneeFilter();
     return this.tasksService
       .tasks()
       .filter((t) => {
         if (t.status === 'アーカイブ済み') return false;
-        if (assigneeFilter === 'unassigned') return !t.assigneeId;
+        if (assigneeFilter === 'unassigned') return !t.assigneeId && !t.parentId;
         if (assigneeFilter) return t.assigneeId === assigneeFilter;
         return t.assigneeId === uid;
       });
@@ -472,12 +502,7 @@ export class MyTasksComponent {
     } else {
       // サブタスクの完了：見積もり無しなら即完了、ありならモーダル表示
       // いずれもカード展開は維持する
-      if (!child.estimatedHours) {
-        await this.tasksService.completeTask(child.id, 0);
-      } else {
-        this.completingTask = child;
-        this.actualHoursInput = child.estimatedHours;
-      }
+      await this.startComplete(child);
     }
   }
 
@@ -557,12 +582,19 @@ export class MyTasksComponent {
     }
   }
 
-  startComplete(task: Task): void {
+  async startComplete(task: Task): Promise<void> {
+    if (this.tasksService.isBlocked(task)) {
+      this.notificationService.show('ブロック中', `「${task.title}」は依存タスクが完了するまで完了にできません`);
+      return;
+    }
     if (!task.estimatedHours) {
-      this.tasksService.completeTask(task.id, 0);
-      this.tasksService.spawnRecurrence(task);
-      this.notificationService.show('完了', `「${task.title}」を完了にしました`);
-      this.expandedTaskId.set(null);
+      try {
+        await this.tasksService.completeTask(task.id, 0);
+        this.notificationService.show('完了', `「${task.title}」を完了にしました`);
+        if (!task.parentId) this.expandedTaskId.set(null);
+      } catch (error) {
+        this.notificationService.show('完了エラー', error instanceof Error ? error.message : 'タスクの完了に失敗しました');
+      }
       return;
     }
     this.completingTask = task;
@@ -573,12 +605,18 @@ export class MyTasksComponent {
     const task = this.completingTask;
     if (!task) return;
     const isSubtask = !!task.parentId;
-    await this.tasksService.completeTask(task.id, this.actualHoursInput);
-    await this.tasksService.spawnRecurrence(task);
-    this.notificationService.show('完了', `「${task.title}」を完了にしました`);
-    this.completingTask = null;
-    if (!isSubtask) {
-      this.expandedTaskId.set(null);
+    const hours = this.actualHoursInput;
+    if (hours == null || hours < 0 || !Number.isFinite(hours)) {
+      this.notificationService.show('入力エラー', '実績時間を正しく入力してください');
+      return;
+    }
+    try {
+      await this.tasksService.completeTask(task.id, hours);
+      this.notificationService.show('完了', `「${task.title}」を完了にしました`);
+      this.completingTask = null;
+      if (!isSubtask) this.expandedTaskId.set(null);
+    } catch (error) {
+      this.notificationService.show('完了エラー', error instanceof Error ? error.message : 'タスクの完了に失敗しました');
     }
   }
 
@@ -594,13 +632,19 @@ export class MyTasksComponent {
 
   // --- カレンダープレビュー ---
   selectedCalTask: Task | null = null;
+  previewSubtasksOpen = false;
 
   openCalTask(task: Task): void {
     this.selectedCalTask = task;
+    this.previewSubtasksOpen = false;
   }
 
   closeCalTask(): void {
     this.selectedCalTask = null;
+  }
+
+  getSubtasks(taskId: string): Task[] {
+    return this.tasksService.tasks().filter((task) => task.parentId === taskId);
   }
 
   // --- カレンダー ---
@@ -618,8 +662,16 @@ export class MyTasksComponent {
 
   calendarMonths = computed(() => {
     const now = new Date();
-    const uid = this.auth.currentUser()?.uid ?? '';
-    const timeOff = buildCalendarTimeOff(this.tasksService.teamSettings()?.holidays ?? [], this.tasksService.members(), uid);
+    const filter = this.effectiveAssigneeFilter();
+    const memberId = filter === 'unassigned' ? null : filter || this.auth.currentUser()?.uid || null;
+    const calendarMembers = memberId
+      ? this.tasksService.members()
+      : [];
+    const timeOff = buildCalendarTimeOff(
+      this.tasksService.teamSettings()?.holidays ?? [],
+      calendarMembers,
+      memberId ?? undefined,
+    );
     const months: { label: string; days: (CalendarDay | null)[] }[] = [];
     const monthCount = this.isMobile() ? 1 : 2;
     const tasks = this.myTasks();
@@ -675,42 +727,53 @@ export class MyTasksComponent {
   }
 
   focusTaskCount = computed(() => {
-    const uid = this.auth.currentUser()?.uid;
+    const uid = this.metricsUid();
     if (!uid) return 0;
     return this.tasksService.getMemberFocusTaskCount(uid);
   });
 
   focusHours = computed(() => {
-    const uid = this.auth.currentUser()?.uid;
+    const uid = this.metricsUid();
     if (!uid) return 0;
     return this.tasksService.getMemberFocusHours(uid);
   });
 
   focusLoadPct = computed(() => {
-    const uid = this.auth.currentUser()?.uid;
+    const uid = this.metricsUid();
     if (!uid) return 0;
     return this.tasksService.getFocusLoadPercent(uid);
   });
 
   weeklyCapacity = computed(() => {
-    const uid = this.auth.currentUser()?.uid;
-    if (!uid) return 40;
-    return this.tasksService.members().find((m) => m.uid === uid)?.weeklyCapacityHours ?? 40;
+    const uid = this.metricsUid();
+    if (!uid) return 0;
+    return this.tasksService.getEffectiveCapacity(uid, 0) || 0;
   });
 
   Math = Math;
   forecastLabels = getForecastWeekLabels();
 
   forecastWeekly = computed(() => {
-    const uid = this.auth.currentUser()?.uid;
+    const uid = this.metricsUid();
     if (!uid) return [0, 0, 0, 0];
     return this.tasksService.getMemberWeeklyHours(uid);
   });
 
   loadLevel(pct: number): string {
+    if (pct < 0) return 'danger';
     if (pct >= 100) return 'danger';
     if (pct >= 80) return 'warn';
     return 'ok';
+  }
+
+  loadLabel(pct: number): string {
+    return pct < 0 ? '稼働予定なし' : pct + '%';
+  }
+
+  getWeekCapacity(weekIndex: number): number {
+    const uid = this.metricsUid();
+    if (!uid) return 0;
+    return this.tasksService.getEffectiveCapacity(uid, weekIndex);
   }
 
   async onFocusToggle(task: Task, event: MouseEvent): Promise<void> {

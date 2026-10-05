@@ -146,6 +146,7 @@ export class CommentPanelComponent {
   );
 
   attachUploading = signal(false);
+  deletingAttachmentIds = signal<Set<string>>(new Set());
   attachError = signal('');
   attachmentsExpanded = signal(false);
   previewAttachment: TaskAttachment | null = null;
@@ -200,6 +201,7 @@ export class CommentPanelComponent {
   }
 
   async submitComment(): Promise<void> {
+    const draft = this.newComment;
     const text = this.newComment.trim();
     const task = this.task();
     const user = this.auth.currentUser();
@@ -215,12 +217,14 @@ export class CommentPanelComponent {
       await this.tasksService.addComment(task.id, submitted, user.uid, authorName);
     } catch (err) {
       console.error('コメント送信エラー:', err);
+      this.notificationService.show('エラー', 'コメントの送信に失敗しました');
       this.isSubmitting.set(false);
       return;
     }
 
-    this.newComment = '';
+    if (this.task()?.id === task.id && this.newComment === draft) this.newComment = '';
     this.isSubmitting.set(false);
+    this.notificationService.show('送信完了', 'コメントを送信しました');
 
     // 1. 通知を送る対象者のIDリスト（重複を防ぐためにSetを使用）
     const targetUids = new Set<string>();
@@ -369,8 +373,31 @@ export class CommentPanelComponent {
 
   async deleteAttachment(att: TaskAttachment): Promise<void> {
     const task = this.task();
-    if (!task) return;
-    await this.tasksService.deleteAttachment(task.id, att.id);
+    if (!task || this.deletingAttachmentIds().has(att.id)) return;
+    this.attachError.set('');
+    this.deletingAttachmentIds.update((ids) => new Set([...ids, att.id]));
+    try {
+      await this.tasksService.deleteAttachment(task.id, att.id);
+      if (this.task()?.id === task.id && this.previewAttachment?.id === att.id) {
+        this.closePreview();
+      }
+    } catch (error) {
+      console.error('添付ファイル削除エラー:', error);
+      if (this.task()?.id === task.id) {
+        const code = (error as { code?: string })?.code;
+        this.attachError.set(
+          code === 'storage/unauthorized' || code === 'permission-denied'
+            ? '添付ファイルを削除する権限がありません。管理者にお問い合わせください。'
+            : '添付ファイルの削除に失敗しました。もう一度お試しください。',
+        );
+      }
+    } finally {
+      this.deletingAttachmentIds.update((ids) => {
+        const next = new Set(ids);
+        next.delete(att.id);
+        return next;
+      });
+    }
   }
 
   isImage(att: TaskAttachment): boolean {

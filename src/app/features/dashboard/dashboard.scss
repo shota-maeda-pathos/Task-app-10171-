@@ -331,6 +331,12 @@
     &.danger { color: var(--danger); }
 }
 
+.load-pct.no-capacity {
+    font-size: 0.66rem;
+    min-width: max-content;
+    white-space: nowrap;
+}
+
 /* 4週間負荷予測 */
 .forecast-labels {
     display: flex;
@@ -450,6 +456,11 @@
     color: var(--muted);
     text-align: center;
     font-variant-numeric: tabular-nums;
+}
+
+.forecast-pct.no-capacity {
+    font-size: 0.58rem;
+    white-space: nowrap;
 }
 
 @media (max-width: 768px) {
@@ -1386,6 +1397,7 @@
 
 .preview-go-btn {
     width: 100%;
+    margin-top: 6px;
     padding: 8px;
     border-radius: 6px;
     font-size: 0.82rem;

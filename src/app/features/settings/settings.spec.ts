@@ -5,17 +5,77 @@ import { SettingsComponent } from './settings';
 import { TasksService } from '../../core/services/tasks.service';
 import { AuthService } from '../../core/services/auth.service';
 import { NotificationService } from '../../core/services/notification.service';
+import { MyTasksComponent } from '../my-tasks/my-tasks';
+import { Router } from '@angular/router';
+
+describe('My Tasks assignee selection', () => {
+  async function setup(role: 'member' | 'manager') {
+    const members = signal([{ uid: 'self', name: 'Self', role, weeklyCapacityHours: 40 }, { uid: 'other', name: 'Other', role: 'member', weeklyCapacityHours: 40 }]);
+    const makeTask = (id: string, assigneeId: string | null, parentId: string | null = null) => ({ id, title: id, assigneeId, parentId, status: '未着手', estimatedHours: 1, focusThisWeek: false, order: 1, blockedBy: [] });
+    const tasks = { members, tasks: signal([makeTask('self-task', 'self'), makeTask('other-task', 'other'), makeTask('unassigned-root', null), makeTask('unassigned-child', null, 'other-task')]), teamSettings: signal({ holidays: [] }),
+      getMemberFocusHours: vi.fn(() => 7), getMemberFocusTaskCount: vi.fn(() => 2), getFocusLoadPercent: vi.fn(() => 18), getEffectiveCapacity: vi.fn(() => 40), getMemberWeeklyHours: vi.fn(() => [7, 8, 9, 10]), isBlocked: () => false, getBlockingCount: () => 0, getEpicProgress: () => 0 };
+    await TestBed.configureTestingModule({ imports: [MyTasksComponent], providers: [
+      { provide: TasksService, useValue: tasks }, { provide: AuthService, useValue: { currentUser: signal({ uid: 'self' }) } },
+      { provide: NotificationService, useValue: { show: vi.fn() } }, { provide: Router, useValue: {} },
+    ] }).compileComponents();
+    const fixture = TestBed.createComponent(MyTasksComponent);
+    await fixture.whenStable();
+    return { fixture, tasks, members };
+  }
+  it('hides the selector for members and ignores another assignee in retained filter state', async () => {
+    const { fixture, tasks } = await setup('member');
+    fixture.componentInstance.filterAssignee.set('other');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.assignee-filter')).toBeNull();
+    expect(fixture.componentInstance.myTasks().map(task => task.id)).toEqual(['self-task']);
+    expect(fixture.componentInstance.focusHours()).toBe(7);
+    expect(tasks.getMemberFocusHours).toHaveBeenLastCalledWith('self');
+  });
+  it('lets managers select another member and uses that member for metrics', async () => {
+    const { fixture, tasks } = await setup('manager');
+    const select = fixture.nativeElement.querySelector('.assignee-filter') as HTMLSelectElement;
+    expect(select).toBeTruthy();
+    select.value = 'other'; select.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.myTasks().map(task => task.id)).toEqual(['other-task']);
+    expect(tasks.getMemberFocusHours).toHaveBeenLastCalledWith('other');
+  });
+  it('shows only unassigned roots and uses dashes instead of personal metrics', async () => {
+    const { fixture, tasks } = await setup('manager');
+    Object.values(tasks).filter(value => typeof value === 'function' && 'mockClear' in value).forEach(value => (value as any).mockClear());
+    fixture.componentInstance.filterAssignee.set('unassigned');
+    fixture.detectChanges();
+    expect(fixture.componentInstance.rootTasks().map(task => task.id)).toEqual(['unassigned-root']);
+    expect(fixture.nativeElement.querySelector('.summary-card-load .summary-value').textContent.trim()).toBe('—');
+    expect(fixture.nativeElement.querySelector('.summary-card-focus .summary-value').textContent.trim()).toBe('—');
+    expect([...fixture.nativeElement.querySelectorAll('.forecast-detail')].every((element: any) => element.textContent.trim() === '—')).toBe(true);
+    expect(tasks.getMemberFocusHours).not.toHaveBeenCalled();
+    expect(tasks.getMemberWeeklyHours).not.toHaveBeenCalled();
+    expect(tasks.getEffectiveCapacity).not.toHaveBeenCalled();
+  });
+  it('returns to personal tasks immediately when manager privileges are removed', async () => {
+    const { fixture, members } = await setup('manager');
+    fixture.componentInstance.filterAssignee.set('other');
+    fixture.detectChanges();
+    members.update(list => list.map(member => ({ ...member, role: 'member' as const })));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.myTasks().map(task => task.id)).toEqual(['self-task']);
+    expect(fixture.nativeElement.querySelector('.assignee-filter')).toBeNull();
+  });
+});
 
 describe('Settings UI interactions', () => {
   const member = (uid: string) => ({ uid, name: uid, role: 'manager', weeklyCapacityHours: 40, avatarColor: '#123456', leaves: [{ date: '2026-10-07', label: '有給' }] });
   let fixture: ReturnType<typeof TestBed.createComponent<SettingsComponent>>;
   let tasks: any;
+  let notificationShow: ReturnType<typeof vi.fn>;
   beforeEach(async () => {
-    tasks = { disabledMembers: signal([]), members: signal([member('self'), member('other')]), teamSettings: signal({ holidays: [{ date: '2026-10-12', name: '休日' }] }), templates: signal([]), getFocusLoadPercent: () => 0, addHoliday: vi.fn().mockResolvedValue(undefined), addLeave: vi.fn().mockResolvedValue(undefined), removeHoliday: vi.fn().mockResolvedValue(undefined), removeLeave: vi.fn().mockResolvedValue(undefined) };
+    tasks = { disabledMembers: signal([]), members: signal([member('self'), member('other')]), teamSettings: signal({ holidays: [{ date: '2026-10-12', name: '休日' }] }), templates: signal([]), getFocusLoadPercent: () => 0, addHoliday: vi.fn().mockResolvedValue(true), addLeave: vi.fn().mockResolvedValue(undefined), removeHoliday: vi.fn().mockResolvedValue(undefined), removeLeave: vi.fn().mockResolvedValue(undefined) };
+    notificationShow = vi.fn();
     await TestBed.configureTestingModule({ imports: [SettingsComponent], providers: [
       { provide: TasksService, useValue: tasks },
       { provide: AuthService, useValue: { currentUser: signal({ uid: 'self' }) } },
-      { provide: NotificationService, useValue: { show: vi.fn() } },
+      { provide: NotificationService, useValue: { show: notificationShow } },
     ] }).compileComponents();
     fixture = TestBed.createComponent(SettingsComponent);
     await fixture.whenStable();
@@ -81,6 +141,27 @@ describe('Settings UI interactions', () => {
     await fixture.componentInstance.addMemberLeave();
     expect(tasks.addLeave).not.toHaveBeenCalled();
   });
+  it('shows a saving state and disables own leave inputs while saving', async () => {
+    let resolveSave!: () => void;
+    tasks.addLeave.mockImplementation(() => new Promise<void>((resolve) => { resolveSave = resolve; }));
+    fixture.nativeElement.querySelectorAll('.leave-editor-toggle')[1].click();
+    await fixture.whenStable();
+    await input('#leave-editor-form [aria-label="開始日"]', '2026-10-07');
+
+    const saveButton = fixture.nativeElement.querySelector('#leave-editor-form .add-btn') as HTMLButtonElement;
+    saveButton.click();
+    fixture.detectChanges();
+
+    expect(saveButton.textContent).toContain('保存中…');
+    expect(fixture.nativeElement.querySelector('#leave-editor-form [aria-label="開始日"]')).toHaveProperty('disabled', true);
+    expect(fixture.nativeElement.querySelector('#leave-editor-form [aria-label="休暇名"]')).toHaveProperty('disabled', true);
+
+    resolveSave();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(saveButton.textContent).toContain('追加');
+    expect(fixture.nativeElement.querySelector('#leave-editor-form [aria-label="開始日"]').disabled).toBe(false);
+  });
   it('closes period menu on outside click and Escape', async () => {
     fixture.nativeElement.querySelectorAll('.leave-editor-toggle')[1].click(); await fixture.whenStable();
     click('#leave-editor-form .leave-period-control'); await fixture.whenStable();
@@ -90,6 +171,47 @@ describe('Settings UI interactions', () => {
     click('#leave-editor-form .leave-period-control'); await fixture.whenStable();
     document.body.click(); await fixture.whenStable();
     expect(fixture.nativeElement.querySelector('.leave-period-options')).toBeNull();
+  });
+  it('preserves a changed own leave draft after saving the original values', async () => {
+    let finish!: () => void;
+    tasks.addLeave.mockImplementation(() => new Promise<void>(resolve => finish = resolve));
+    const component = fixture.componentInstance;
+    component.newLeaveStartDate = '2026-10-07';
+    component.newLeavePeriod = 'am';
+    const pending = component.addMyLeave();
+    component.newLeaveStartDate = '2026-10-08';
+    component.newLeaveLabel = '次の休暇';
+    component.newLeavePeriod = 'pm';
+    finish(); await pending;
+    expect(tasks.addLeave).toHaveBeenCalledWith('self', [{ date: '2026-10-07', label: '有給', period: 'am' }]);
+    expect(component.newLeaveStartDate).toBe('2026-10-08');
+    expect(component.newLeaveLabel).toBe('次の休暇');
+    expect(component.newLeavePeriod).toBe('pm');
+  });
+  it('keeps another member leave editor open after the previous save completes', async () => {
+    let finish!: () => void;
+    tasks.addLeave.mockImplementation(() => new Promise<void>(resolve => finish = resolve));
+    const component = fixture.componentInstance;
+    component.openAddMemberLeave('other');
+    component.memberLeaveStartDate = '2026-10-07';
+    const pending = component.addMemberLeave();
+    component.openAddMemberLeave('self');
+    component.memberLeaveStartDate = '2026-10-08';
+    finish(); await pending;
+    expect(component.addMemberLeaveTarget).toBe('self');
+    expect(component.memberLeaveStartDate).toBe('2026-10-08');
+  });
+  it('preserves the next holiday draft after the previous save completes', async () => {
+    let finish!: (added: boolean) => void;
+    tasks.addHoliday.mockImplementation(() => new Promise<boolean>(resolve => finish = resolve));
+    const component = fixture.componentInstance;
+    component.newHolidayDate = '2026-10-07';
+    component.newHolidayName = '休日';
+    const pending = component.addHoliday();
+    component.newHolidayName = '次の休日';
+    finish(true); await pending;
+    expect(component.newHolidayName).toBe('次の休日');
+    expect(component.newHolidayDate).toBe('2026-10-07');
   });
   it('imports only selected year holidays and reports saved count', async () => {
     const year = fixture.componentInstance.holidayImportYear;
@@ -146,17 +268,30 @@ describe('Settings UI interactions', () => {
     fixture.nativeElement.querySelector('#leave-editor-form .add-btn').click(); await fixture.whenStable();
     expect(tasks.addLeave).toHaveBeenCalledWith('self', [{ date: '2026-10-09', label: '有給' }, { date: '2026-10-12', label: '有給' }]);
   });
-  it('opens member editing and deletion modals and dispatches leave removal', async () => {
+  it('uses trash icons and confirms successful holiday and leave deletions', async () => {
     click('.member-row.cdk-drag .edit-btn'); await fixture.whenStable();
     expect(fixture.nativeElement.querySelector('.modal')).toBeTruthy();
     fixture.componentInstance.cancelEdit(); fixture.detectChanges();
     click('.member-row.cdk-drag .delete-btn'); await fixture.whenStable();
     expect(fixture.nativeElement.querySelector('.delete-warning')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('#team-holidays-body .leave-remove svg')).toBeTruthy();
     click('.leave-remove'); await fixture.whenStable();
     expect(tasks.removeHoliday).toHaveBeenCalledWith('2026-10-12');
+    expect(notificationShow).toHaveBeenCalledWith('削除完了', 'チーム休日を削除しました');
+    expect(fixture.nativeElement.querySelector('#my-leaves-body .leave-remove svg')).toBeTruthy();
+    await fixture.componentInstance.removeMyLeave('2026-10-07');
+    expect(tasks.removeLeave).toHaveBeenCalledWith('self', '2026-10-07');
+    expect(notificationShow).toHaveBeenCalledWith('削除完了', '休暇を削除しました');
     click('.member-row.cdk-drag .member-leaves-toggle'); await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('.member-row.cdk-drag .leave-remove-btn svg')).toBeTruthy();
     click('.member-row.cdk-drag .leave-remove-btn'); await fixture.whenStable();
     expect(tasks.removeLeave).toHaveBeenCalledWith('other', '2026-10-07');
+    expect(notificationShow).toHaveBeenCalledWith('削除完了', 'メンバーの休暇を削除しました');
+  });
+  it('notifies when a holiday deletion fails', async () => {
+    tasks.removeHoliday.mockRejectedValueOnce(new Error('write failed'));
+    await fixture.componentInstance.removeHoliday('2026-10-12');
+    expect(notificationShow).toHaveBeenCalledWith('エラー', 'チーム休日の削除に失敗しました');
   });
   it('opens and closes pinned and draggable member leaves independently', async () => {
     const rows = fixture.nativeElement.querySelectorAll('.member-row');

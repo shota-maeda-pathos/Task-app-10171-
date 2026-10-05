@@ -35,7 +35,7 @@
         <span>今週の完了数</span>
       </div>
       <div class="summary-value">{{ weeklyCompleted() }}<span class="unit">件</span></div>
-      <div class="summary-sub">直近7日間</div>
+      <div class="summary-sub">月曜始まりのカレンダー週</div>
     </div>
     <div class="summary-card">
       <div class="summary-label">
@@ -77,7 +77,7 @@
                 <span class="you-badge">あなた</span>
               </div>
               <div class="load-meta">
-                {{ stat.focusTaskCount }}件フォーカス・{{ stat.focusHours }}h / {{ stat.member.weeklyCapacityHours }}h
+                {{ stat.focusTaskCount }}件フォーカス・{{ stat.focusHours }}h / {{ Math.round(tasksService.getEffectiveCapacity(stat.member.uid, 0) * 10) / 10 }}h
               </div>
             </div>
           </div>
@@ -86,10 +86,14 @@
               <div
                 class="bar-fill"
                 [class]="loadLevel(stat.loadPct)"
-                [style.width.%]="stat.loadPct > 100 ? 100 : stat.loadPct"
+                [style.width.%]="stat.loadPct < 0 ? 0 : stat.loadPct > 100 ? 100 : stat.loadPct"
               ></div>
             </div>
-            <span class="load-pct" [class]="loadLevel(stat.loadPct)">{{ stat.loadPct }}%</span>
+            <span
+              class="load-pct"
+              [class]="loadLevel(stat.loadPct)"
+              [class.no-capacity]="stat.loadPct < 0"
+            >{{ loadLabel(stat.loadPct) }}</span>
           </div>
         </div>
       }
@@ -139,7 +143,7 @@
                   <div>
                     <div class="load-name">{{ stat.member.name }}</div>
                     <div class="load-meta">
-                      {{ stat.focusTaskCount }}件フォーカス・{{ stat.focusHours }}h / {{ stat.member.weeklyCapacityHours }}h
+                      {{ stat.focusTaskCount }}件フォーカス・{{ stat.focusHours }}h / {{ Math.round(tasksService.getEffectiveCapacity(stat.member.uid, 0) * 10) / 10 }}h
                     </div>
                   </div>
                 </div>
@@ -148,10 +152,14 @@
                     <div
                       class="bar-fill"
                       [class]="loadLevel(stat.loadPct)"
-                      [style.width.%]="stat.loadPct > 100 ? 100 : stat.loadPct"
+                      [style.width.%]="stat.loadPct < 0 ? 0 : stat.loadPct > 100 ? 100 : stat.loadPct"
                     ></div>
                   </div>
-                  <span class="load-pct" [class]="loadLevel(stat.loadPct)">{{ stat.loadPct }}%</span>
+                  <span
+                    class="load-pct"
+                    [class]="loadLevel(stat.loadPct)"
+                    [class.no-capacity]="stat.loadPct < 0"
+                  >{{ loadLabel(stat.loadPct) }}</span>
                 </div>
               </div>
             }
@@ -195,23 +203,24 @@
                 {{ stat.member.name }}
                 <span class="you-badge">あなた</span>
               </div>
-              <div class="load-meta">{{ totalCount }}件・{{ totalHours }}h / {{ stat.member.weeklyCapacityHours * 4 }}h</div>
+              @let totalCap = tasksService.getEffectiveCapacity(stat.member.uid, 0) + tasksService.getEffectiveCapacity(stat.member.uid, 1) + tasksService.getEffectiveCapacity(stat.member.uid, 2) + tasksService.getEffectiveCapacity(stat.member.uid, 3);
+              <div class="load-meta">{{ totalCount }}件・{{ totalHours }}h / {{ Math.round(totalCap) }}h</div>
             </div>
           </div>
           <div class="forecast-bars">
             @for (hours of stat.forecast; track $index) {
-              @let cap = stat.member.weeklyCapacityHours;
-              @let pct = cap > 0 ? Math.round((hours / cap) * 100) : 0;
+              @let cap = tasksService.getEffectiveCapacity(stat.member.uid, $index);
+              @let pct = cap > 0 ? Math.round((hours / cap) * 100) : (hours > 0 ? -1 : 0);
               @let count = stat.forecastCounts[$index];
               <div class="forecast-week">
                 <span class="forecast-count">{{ count }}件</span>
                 <div class="forecast-bar-track">
                   <div class="forecast-bar-fill"
                        [class]="loadLevel(pct)"
-                       [style.width.%]="pct > 100 ? 100 : pct">
+                       [style.width.%]="pct < 0 ? 0 : pct > 100 ? 100 : pct">
                   </div>
                 </div>
-                <span class="forecast-hours">{{ hours }}h<span class="forecast-pct" [class]="loadLevel(pct)"> ({{ pct }}%)</span></span>
+                <span class="forecast-hours">{{ hours }}h<span class="forecast-pct" [class]="loadLevel(pct)" [class.no-capacity]="pct < 0"> ({{ loadLabel(pct) }})</span></span>
               </div>
             }
           </div>
@@ -262,23 +271,24 @@
                   }}</span>
                   <div>
                     <div class="forecast-name">{{ stat.member.name }}</div>
-                    <div class="load-meta">{{ totalCount }}件・{{ totalHours }}h / {{ stat.member.weeklyCapacityHours * 4 }}h</div>
+                    @let otherTotalCap = tasksService.getEffectiveCapacity(stat.member.uid, 0) + tasksService.getEffectiveCapacity(stat.member.uid, 1) + tasksService.getEffectiveCapacity(stat.member.uid, 2) + tasksService.getEffectiveCapacity(stat.member.uid, 3);
+                    <div class="load-meta">{{ totalCount }}件・{{ totalHours }}h / {{ Math.round(otherTotalCap) }}h</div>
                   </div>
                 </div>
                 <div class="forecast-bars">
                   @for (hours of stat.forecast; track $index) {
-                    @let cap = stat.member.weeklyCapacityHours;
-                    @let pct = cap > 0 ? Math.round((hours / cap) * 100) : 0;
+                    @let cap = tasksService.getEffectiveCapacity(stat.member.uid, $index);
+                    @let pct = cap > 0 ? Math.round((hours / cap) * 100) : (hours > 0 ? -1 : 0);
                     @let count = stat.forecastCounts[$index];
                     <div class="forecast-week">
                       <span class="forecast-count">{{ count }}件</span>
                       <div class="forecast-bar-track">
                         <div class="forecast-bar-fill"
                              [class]="loadLevel(pct)"
-                             [style.width.%]="pct > 100 ? 100 : pct">
+                             [style.width.%]="pct < 0 ? 0 : pct > 100 ? 100 : pct">
                         </div>
                       </div>
-                      <span class="forecast-hours">{{ hours }}h<span class="forecast-pct" [class]="loadLevel(pct)"> ({{ pct }}%)</span></span>
+                      <span class="forecast-hours">{{ hours }}h<span class="forecast-pct" [class]="loadLevel(pct)" [class.no-capacity]="pct < 0"> ({{ loadLabel(pct) }})</span></span>
                     </div>
                   }
                 </div>
@@ -500,7 +510,9 @@
               <div class="archive-actions">
                 @if (canEditTask(task)) {
                   <button class="act-restore" (click)="restoreTask(task)">復元</button>
-                  <button class="act-delete" (click)="openDeleteTask(task)">削除</button>
+                  @if (tasksService.canDeleteTask(task)) {
+                    <button class="act-delete" (click)="openDeleteTask(task)">削除</button>
+                  }
                 }
               </div>
             </div>
@@ -621,12 +633,12 @@
     <div class="modal" (click)="$event.stopPropagation()">
       <h3>「{{ deletingTask.title }}」を削除しますか？</h3>
       <p class="delete-warning">
-        このタスクを完全に削除します。<br />
+        このタスクと子タスクを完全に削除します。他の人が投稿した添付ファイル・コメント・履歴も削除します。<br />
         この操作は元に戻せません。
       </p>
       <div class="modal-actions">
         <button (click)="cancelDeleteTask()">キャンセル</button>
-        <button class="danger" (click)="confirmDeleteTask()">削除する</button>
+        <button class="danger" [disabled]="deleteInProgress()" (click)="confirmDeleteTask()">{{ deleteInProgress() ? '削除中…' : '削除する' }}</button>
       </div>
     </div>
   </div>

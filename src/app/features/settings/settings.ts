@@ -332,6 +332,7 @@ export class SettingsComponent {
   memberLeaveEndDate = '';
   memberLeaveLabel = '有給';
   memberLeavePeriod: LeavePeriod = 'full';
+  saving = signal(false);
 
   formatHolidayDate(dateStr: string): string {
     const d = new Date(dateStr + 'T00:00:00');
@@ -344,29 +345,43 @@ export class SettingsComponent {
   }
 
   async addHoliday(): Promise<void> {
-    if (!this.newHolidayDate || !this.newHolidayName.trim()) return;
+    if (!this.newHolidayDate || !this.newHolidayName.trim() || this.saving()) return;
+    const date = this.newHolidayDate;
+    const name = this.newHolidayName;
+    this.saving.set(true);
     try {
-      await this.tasksService.addHoliday({ date: this.newHolidayDate, name: this.newHolidayName.trim() });
-      this.newHolidayDate = '';
-      this.newHolidayName = '';
-      this.notificationService.show('追加完了', '祝日を追加しました');
+      const added = await this.tasksService.addHoliday({ date, name: name.trim() });
+      if (added) {
+        if (this.newHolidayDate === date && this.newHolidayName === name) {
+          this.newHolidayDate = '';
+          this.newHolidayName = '';
+        }
+        this.notificationService.show('追加完了', '祝日を追加しました');
+      } else {
+        this.notificationService.show('登録済み', 'この日付の祝日は既に登録されています');
+      }
     } catch (e) {
       console.error('祝日追加エラー:', e);
       this.notificationService.show('エラー', '祝日の追加に失敗しました');
+    } finally {
+      this.saving.set(false);
     }
   }
 
   async removeHoliday(date: string): Promise<void> {
     try {
       await this.tasksService.removeHoliday(date);
+      this.notificationService.show('削除完了', 'チーム休日を削除しました');
     } catch (e) {
       console.error('祝日削除エラー:', e);
+      this.notificationService.show('エラー', 'チーム休日の削除に失敗しました');
     }
   }
 
   async addMyLeave(): Promise<void> {
+    const draft = [this.newLeaveStartDate, this.newLeaveEndDate, this.newLeaveLabel, this.newLeavePeriod];
     const start = this.newLeaveStartDate;
-    if (!start) return;
+    if (!start || this.saving()) return;
     const end = this.newLeaveEndDate || start;
     if (this.newLeavePeriod !== 'full' && end !== start) {
       this.notificationService.show('入力エラー', '半休は開始日と終了日を同じ日にしてください');
@@ -374,32 +389,45 @@ export class SettingsComponent {
     }
     const label = this.newLeaveLabel.trim() || '休暇';
     const uid = this.auth.currentUser()?.uid;
-    if (!uid) return;
+    if (!uid) {
+      this.notificationService.show('エラー', 'ログイン状態を確認してください');
+      return;
+    }
     const dates = expandWeekdayRange(start, end);
     if (dates.length === 0) {
       this.notificationService.show('入力エラー', '開始日・終了日を確認し、平日を含む期間を指定してください');
       return;
     }
+    this.saving.set(true);
     try {
       await this.tasksService.addLeave(uid, dates.map((d) => ({ date: d, label, ...(this.newLeavePeriod === 'full' ? {} : { period: this.newLeavePeriod }) })));
-      this.newLeaveStartDate = '';
-      this.newLeaveEndDate = '';
-      this.newLeaveLabel = '有給';
-      this.newLeavePeriod = 'full';
+      if (this.auth.currentUser()?.uid === uid && [this.newLeaveStartDate, this.newLeaveEndDate, this.newLeaveLabel, this.newLeavePeriod].every((value, index) => value === draft[index])) {
+        this.newLeaveStartDate = '';
+        this.newLeaveEndDate = '';
+        this.newLeaveLabel = '有給';
+        this.newLeavePeriod = 'full';
+      }
       this.notificationService.show('追加完了', '休暇を追加しました');
     } catch (e) {
       console.error('休暇追加エラー:', e);
       this.notificationService.show('エラー', '休暇の追加に失敗しました');
+    } finally {
+      this.saving.set(false);
     }
   }
 
   async removeMyLeave(date: string): Promise<void> {
     const uid = this.auth.currentUser()?.uid;
-    if (!uid) return;
+    if (!uid) {
+      this.notificationService.show('エラー', 'ログイン状態を確認できないため、休暇を削除できませんでした');
+      return;
+    }
     try {
       await this.tasksService.removeLeave(uid, date);
+      this.notificationService.show('削除完了', '休暇を削除しました');
     } catch (e) {
       console.error('休暇削除エラー:', e);
+      this.notificationService.show('エラー', '休暇の削除に失敗しました');
     }
   }
 
@@ -412,8 +440,9 @@ export class SettingsComponent {
   }
 
   async addMemberLeave(): Promise<void> {
+    const draft = [this.memberLeaveStartDate, this.memberLeaveEndDate, this.memberLeaveLabel, this.memberLeavePeriod];
     const uid = this.addMemberLeaveTarget;
-    if (!uid || !this.memberLeaveStartDate) return;
+    if (!uid || !this.memberLeaveStartDate || this.saving()) return;
     const end = this.memberLeaveEndDate || this.memberLeaveStartDate;
     if (this.memberLeavePeriod !== 'full' && end !== this.memberLeaveStartDate) {
       this.notificationService.show('入力エラー', '半休は開始日と終了日を同じ日にしてください');
@@ -421,22 +450,32 @@ export class SettingsComponent {
     }
     const label = this.memberLeaveLabel.trim() || '休暇';
     const dates = expandWeekdayRange(this.memberLeaveStartDate, end);
-    if (dates.length === 0) return;
+    if (dates.length === 0) {
+      this.notificationService.show('入力エラー', '開始日・終了日を確認し、平日を含む期間を指定してください');
+      return;
+    }
+    this.saving.set(true);
     try {
       await this.tasksService.addLeave(uid, dates.map((d) => ({ date: d, label, ...(this.memberLeavePeriod === 'full' ? {} : { period: this.memberLeavePeriod }) })));
-      this.addMemberLeaveTarget = null;
+      if (this.addMemberLeaveTarget === uid && [this.memberLeaveStartDate, this.memberLeaveEndDate, this.memberLeaveLabel, this.memberLeavePeriod].every((value, index) => value === draft[index])) {
+        this.addMemberLeaveTarget = null;
+      }
       this.notificationService.show('追加完了', '休暇を追加しました');
     } catch (e) {
       console.error('休暇追加エラー:', e);
       this.notificationService.show('エラー', '休暇の追加に失敗しました');
+    } finally {
+      this.saving.set(false);
     }
   }
 
   async removeMemberLeave(uid: string, date: string): Promise<void> {
     try {
       await this.tasksService.removeLeave(uid, date);
+      this.notificationService.show('削除完了', 'メンバーの休暇を削除しました');
     } catch (e) {
       console.error('休暇削除エラー:', e);
+      this.notificationService.show('エラー', 'メンバーの休暇削除に失敗しました');
     }
   }
 
