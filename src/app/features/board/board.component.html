@@ -153,12 +153,11 @@
               {{ formatHours(Math.round(tasksService.getEffectiveCapacity(member.uid, 0) * 10) / 10) }}h
             </button>
             @let myWorkingDays = tasksService.getWorkingDays(member.uid, 0);
-            @if (myWorkingDays < 5) {
+            @if (myWorkingDays > 0 && myWorkingDays < 5) {
               <span
                 class="working-days-badge"
-                [class.no-working-days]="myWorkingDays === 0"
                 title="今週の平日5日から、チーム休日・本人の休暇を除いた稼働日数"
-              >{{ myWorkingDays === 0 ? '稼働予定なし' : '稼働 ' + myWorkingDays + '日' }}</span>
+              >稼働 {{ myWorkingDays }}日</span>
             }
           </div>
           @if (filterAssignee() === member.uid) {
@@ -266,12 +265,11 @@
                 {{ formatHours(Math.round(tasksService.getEffectiveCapacity(member.uid, 0) * 10) / 10) }}h
               </button>
               @let otherWorkingDays = tasksService.getWorkingDays(member.uid, 0);
-              @if (otherWorkingDays < 5) {
+              @if (otherWorkingDays > 0 && otherWorkingDays < 5) {
                 <span
                   class="working-days-badge"
-                  [class.no-working-days]="otherWorkingDays === 0"
                   title="今週の平日5日から、チーム休日・本人の休暇を除いた稼働日数"
-                >{{ otherWorkingDays === 0 ? '稼働予定なし' : '稼働 ' + otherWorkingDays + '日' }}</span>
+                >稼働 {{ otherWorkingDays }}日</span>
               }
             </div>
             @if (filterAssignee() === member.uid) {
