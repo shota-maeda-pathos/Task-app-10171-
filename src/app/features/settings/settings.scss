@@ -1492,6 +1492,31 @@
   .holiday-name-input { flex: 1 1 110px; width: 110px; }
   .add-btn { min-height: 36px; padding: 7px 12px; }
 }
+.required-mark {
+  color: var(--danger, #e53935);
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+.leave-settings .holiday-add-form .holiday-date-range {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex: 0 0 100%;
+  .date-separator {
+    padding-bottom: 10px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+}
+.leave-settings .holiday-add-form .holiday-date-range label.holiday-form-field {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.leave-settings .holiday-add-form .holiday-date-range div.holiday-form-field {
+  flex: 0 0 auto;
+  min-width: auto;
+}
 .leave-settings .holiday-add-form .holiday-form-field {
   display: flex;
   flex: 1 1 140px;
@@ -1523,11 +1548,7 @@
   align-self: flex-end;
   padding-bottom: 10px;
 }
-.leave-settings .own-leave-form .leave-period-menu {
-  width: 100%;
-}
 .leave-settings .own-leave-form .leave-period-control {
-  width: 100%;
   min-height: 38px;
   height: 38px;
   padding: 8px 10px;

@@ -297,7 +297,8 @@ export class SettingsComponent {
   holidayEditorOpen = signal(false);
   leaveEditorOpen = signal(false);
 
-  newHolidayDate = '';
+  newHolidayStartDate = '';
+  newHolidayEndDate = '';
   newHolidayName = '';
   newLeaveStartDate = '';
   newLeaveEndDate = '';
@@ -345,20 +346,28 @@ export class SettingsComponent {
   }
 
   async addHoliday(): Promise<void> {
-    if (!this.newHolidayDate || !this.newHolidayName.trim() || this.saving()) return;
-    const date = this.newHolidayDate;
+    const start = this.newHolidayStartDate;
+    if (!start || !this.newHolidayName.trim() || this.saving()) return;
+    const end = this.newHolidayEndDate || start;
     const name = this.newHolidayName;
+    const dates = expandWeekdayRange(start, end);
+    if (dates.length === 0) {
+      this.notificationService.show('入力エラー', '開始日・終了日を確認し、平日を含む期間を指定してください');
+      return;
+    }
+    const holidays = dates.map(d => ({ date: d, name: name.trim() }));
     this.saving.set(true);
     try {
-      const added = await this.tasksService.addHoliday({ date, name: name.trim() });
-      if (added) {
-        if (this.newHolidayDate === date && this.newHolidayName === name) {
-          this.newHolidayDate = '';
+      const count = await this.tasksService.addHolidays(holidays);
+      if (count > 0) {
+        if (this.newHolidayStartDate === start && this.newHolidayName === name) {
+          this.newHolidayStartDate = '';
+          this.newHolidayEndDate = '';
           this.newHolidayName = '';
         }
-        this.notificationService.show('追加完了', '祝日を追加しました');
+        this.notificationService.show('追加完了', `${count}件の休日を追加しました`);
       } else {
-        this.notificationService.show('登録済み', 'この日付の祝日は既に登録されています');
+        this.notificationService.show('登録済み', '指定期間の休日は既に登録されています');
       }
     } catch (e) {
       console.error('祝日追加エラー:', e);
