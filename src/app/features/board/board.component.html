@@ -1446,7 +1446,11 @@
                           <line x1="12" y1="9" x2="12" y2="13" />
                           <line x1="12" y1="17" x2="12.01" y2="17" />
                         </svg>
-                        {{ getMemberName(newRootAssignee) }}さんはすでに{{ pct }}%の負荷です
+                        @if (pct < 0) {
+                          {{ getMemberName(newRootAssignee) }}さんは今週稼働予定がありません
+                        } @else {
+                          {{ getMemberName(newRootAssignee) }}さんはすでに{{ loadLabel(pct) }}の負荷です
+                        }
                         @if (getAlternativeCandidates(newRootAssignee).length > 0) {
                           <div class="alt-select-row">
                             <select
@@ -2041,9 +2045,11 @@
                                   <line x1="12" y1="9" x2="12" y2="13" />
                                   <line x1="12" y1="17" x2="12.01" y2="17" />
                                 </svg>
-                                {{ getMemberName(newSubtaskAssignee) }}さんの負荷が{{
-                                  pct
-                                }}%を超えます。
+                                @if (pct < 0) {
+                                  {{ getMemberName(newSubtaskAssignee) }}さんは今週稼働予定がありません。
+                                } @else {
+                                  {{ getMemberName(newSubtaskAssignee) }}さんの負荷が{{ loadLabel(pct) }}を超えます。
+                                }
                                 @if (getAlternativeCandidates(newSubtaskAssignee).length > 0) {
                                   <div class="alt-select-row">
                                     <select
@@ -2058,7 +2064,7 @@
                                         track c.uid
                                       ) {
                                         <option [value]="c.uid">
-                                          {{ c.name }}（{{ c.pct }}%）
+                                          {{ c.name }}（{{ loadLabel(c.pct) }}）
                                         </option>
                                       }
                                     </select>
@@ -2289,7 +2295,11 @@
           <line x1="12" y1="9" x2="12" y2="13" />
           <line x1="12" y1="17" x2="12.01" y2="17" />
         </svg>
-        {{ pendingAdd.name }}さんの負荷が{{ pendingAdd.pct }}%になります
+        @if (pendingAdd.pct < 0) {
+          {{ pendingAdd.name }}さんは今週稼働予定がありません
+        } @else {
+          {{ pendingAdd.name }}さんの負荷が{{ loadLabel(pendingAdd.pct) }}になります
+        }
       </h3>
       <p class="modal-sub">
         @if (pendingAdd.kind === 'edit') {
@@ -2304,7 +2314,7 @@
           @for (c of pendingAdd.candidates; track c.uid) {
             <button type="button" class="alt-candidate-btn" (click)="switchToAlternative(c.uid)">
               <span class="alt-candidate-name">{{ c.name }}</span>
-              <span class="alt-candidate-pct" [class]="loadLevel(c.pct)">{{ c.pct }}%</span>
+              <span class="alt-candidate-pct" [class]="loadLevel(c.pct)">{{ loadLabel(c.pct) }}</span>
             </button>
           }
         </div>
