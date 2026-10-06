@@ -2629,7 +2629,7 @@
         name="focusHours"
         type="number"
         min="0.1"
-        [max]="task.estimatedHours"
+        [max]="task.estimatedHours || null"
         step="0.1"
         required
         [value]="focusHoursDraft() ?? ''"

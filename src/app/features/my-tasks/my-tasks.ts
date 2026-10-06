@@ -646,6 +646,10 @@ export class MyTasksComponent {
   });
 
   async moveTaskDueDate(task: Task, date: Date): Promise<void> {
+    if (!this.canMoveTask(task)) {
+      this.notificationService.show('権限エラー', '他人のタスクの締切日は変更できません');
+      return;
+    }
     const currentDueDate = task.dueDate?.toDate();
     if (
       currentDueDate &&

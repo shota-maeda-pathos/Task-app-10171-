@@ -604,18 +604,22 @@ export class TasksService {
     // 削除するメンバーに割り当てられたタスクの担当を解除
     const assignedQuery = query(this.tasksCollection, where('assigneeId', '==', memberId));
     const assignedSnap = await getDocs(assignedQuery);
-    const batch = writeBatch(this.firestore);
-    assignedSnap.docs.forEach((d) => {
-      batch.update(d.ref, { assigneeId: null });
-    });
-    await batch.commit();
+    for (let start = 0; start < assignedSnap.docs.length; start += 500) {
+      const batch = writeBatch(this.firestore);
+      assignedSnap.docs.slice(start, start + 500).forEach((d) => {
+        batch.update(d.ref, { assigneeId: null });
+      });
+      await batch.commit();
+    }
 
     // 通知サブコレクションを削除
     const notifCol = collection(this.firestore, 'members', memberId, 'notifications');
     const notifSnap = await getDocs(notifCol);
-    const notifBatch = writeBatch(this.firestore);
-    notifSnap.docs.forEach((d) => notifBatch.delete(d.ref));
-    await notifBatch.commit();
+    for (let start = 0; start < notifSnap.docs.length; start += 500) {
+      const notifBatch = writeBatch(this.firestore);
+      notifSnap.docs.slice(start, start + 500).forEach((d) => notifBatch.delete(d.ref));
+      await notifBatch.commit();
+    }
 
     // メンバーを無効化（再ログイン防止のためドキュメントは残す）
     const ref = doc(this.firestore, 'members', memberId);
@@ -1291,13 +1295,14 @@ export class TasksService {
   async markAllAsRead(uid: string): Promise<void> {
     const notifCol = collection(this.firestore, 'members', uid, 'notifications');
     const snap = await getDocs(notifCol);
-    const batch = writeBatch(this.firestore);
-    snap.docs.forEach((d) => {
-      if (!d.data()['read']) {
+    const unread = snap.docs.filter((d) => !d.data()['read']);
+    for (let start = 0; start < unread.length; start += 500) {
+      const batch = writeBatch(this.firestore);
+      unread.slice(start, start + 500).forEach((d) => {
         batch.update(d.ref, { read: true });
-      }
-    });
-    await batch.commit();
+      });
+      await batch.commit();
+    }
   }
 
   // ===== リアクション =====
