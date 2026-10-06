@@ -1,4 +1,4 @@
-import { Component, inject, signal, computed, effect, HostListener } from '@angular/core';
+import { Component, inject, signal, computed, effect, HostListener, NgZone } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
@@ -8,7 +8,8 @@ import { AuthService } from './core/services/auth.service';
 import { TasksService } from './core/services/tasks.service';
 import { NotificationService } from './core/services/notification.service';
 import { Router } from '@angular/router';
-import { Timestamp } from '@angular/fire/firestore';
+import { Timestamp, Firestore } from '@angular/fire/firestore';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/models/task.model';
 
 @Component({
@@ -110,12 +111,18 @@ import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/model
                             「{{ notif.taskTitle }}」の差し戻しが却下されました
                           } @else if (notif.type === 'task_completed') {
                             「{{ notif.taskTitle }}」が完了しました
+                          } @else if (notif.type === 'assignee_changed') {
+                            「{{ notif.taskTitle }}」の担当に設定されました
                           } @else {
                             「{{ notif.taskTitle }}」に新着コメント
                           }
                         </div>
                         <div class="notif-body">
-                          {{ notif.authorName }}: {{ notif.text.slice(0, 40) }}
+                          @if (notif.type === 'comment') {
+                            {{ notif.authorName }}: {{ notif.text.slice(0, 40) }}
+                          } @else {
+                            {{ notif.text.slice(0, 50) }}
+                          }
                         </div>
                         <div class="notif-time">{{ formatNotifTime(notif.createdAt) }}</div>
                         @if (
@@ -1328,6 +1335,8 @@ export class App {
   auth = inject(AuthService);
   tasksService = inject(TasksService);
   notificationService = inject(NotificationService);
+  private ngZone = inject(NgZone);
+  private firestore = inject(Firestore);
   missingRecurrenceTasks = computed(() => {
     this.auth.currentUser();
     return this.tasksService.getMissingRecurrenceTasks();
@@ -1393,16 +1402,37 @@ export class App {
 
   constructor() {
     effect(() => this.openHomeOnStartup(this.auth.currentUser()?.uid ?? null));
-    // トースト通知: タスク一覧が変わるたびに監視対象を更新
+    // トースト通知: 通知コレクションを監視してコメント受信時のみトースト表示
+    let notifUnsub: (() => void) | null = null;
     effect(() => {
       const uid = this.auth.currentUser()?.uid ?? null;
-      const _tasks = this.tasksService.tasks();
-      if (!uid || _tasks.length === 0) return;
-      this.tasksService.watchMyTaskComments(uid, (taskTitle, authorName, text) => {
-        this.notificationService.show(
-          `「${taskTitle}」に新着コメント`,
-          `${authorName}: ${text.slice(0, 40)}`,
-        );
+      if (notifUnsub) { notifUnsub(); notifUnsub = null; }
+      if (!uid) return;
+      const notifCol = collection(this.firestore, 'members', uid, 'notifications');
+      const q = query(notifCol, orderBy('createdAt', 'desc'));
+      let initialized = false;
+      let knownIds = new Set<string>();
+      notifUnsub = onSnapshot(q, (snapshot) => {
+        if (!initialized) {
+          knownIds = new Set(snapshot.docs.map(d => d.id));
+          initialized = true;
+          return;
+        }
+        for (const change of snapshot.docChanges()) {
+          if (change.type === 'added' && !knownIds.has(change.doc.id)) {
+            const data = change.doc.data();
+            knownIds.add(change.doc.id);
+            if (data['type'] === 'comment') {
+              this.ngZone.run(() => {
+                this.notificationService.show(
+                  `「${data['taskTitle'] ?? ''}」に新着コメント`,
+                  `${data['authorName'] ?? ''}: ${(data['text'] ?? '').slice(0, 40)}`,
+                );
+              });
+            }
+          }
+        }
+        knownIds = new Set(snapshot.docs.map(d => d.id));
       });
     });
 
@@ -1484,6 +1514,18 @@ export class App {
     const uid = this.auth.currentUser()?.uid;
     if (!uid) return;
     await this.tasksService.markAllAsRead(uid);
+  }
+
+  getNotifTitle(type: string | undefined, taskTitle: string): string {
+    switch (type) {
+      case 'task_created': return `「${taskTitle}」が追加されました`;
+      case 'returned': return `「${taskTitle}」の差し戻し申請が届きました`;
+      case 'review_approved': return `「${taskTitle}」の差し戻しが承認されました`;
+      case 'review_rejected': return `「${taskTitle}」の差し戻しが却下されました`;
+      case 'task_completed': return `「${taskTitle}」が完了しました`;
+      case 'assignee_changed': return `「${taskTitle}」の担当に設定されました`;
+      default: return `「${taskTitle}」に新着コメント`;
+    }
   }
 
   formatNotifTime(timestamp: any): string {

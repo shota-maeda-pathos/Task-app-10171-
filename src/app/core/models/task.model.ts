@@ -135,5 +135,5 @@ export interface TaskNotification {
   text: string;
   read: boolean;
   createdAt: Timestamp;
-  type?: 'comment' | 'task_created' | 'returned' | 'review_approved' | 'review_rejected' | 'review_withdrawn' | 'task_completed';
+  type?: 'comment' | 'task_created' | 'returned' | 'review_approved' | 'review_rejected' | 'review_withdrawn' | 'task_completed' | 'assignee_changed';
 }

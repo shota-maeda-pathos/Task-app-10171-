@@ -26,6 +26,7 @@ import {
   runTransaction,
   deleteField,
   Timestamp,
+  onSnapshot,
 } from 'firebase/firestore';
 import {
   Task,
@@ -70,7 +71,7 @@ export class TasksService {
   private membersCollection = collection(this.firestore, 'members');
   private templatesCollection = collection(this.firestore, 'taskTemplates');
   private teamSettingsDoc = doc(this.firestore, 'teamSettings', 'default');
-  private watchedTaskSubs = new Map<string, Subscription>();
+  private watchedTaskSubs = new Map<string, () => void>();
   private weeklyFocusActivated = false;
   private rootReorderQueue: Promise<void> = Promise.resolve();
   private lastRootTaskOrder = 0;
@@ -363,6 +364,7 @@ export class TasksService {
           text: `${authorName}さんがあなたを担当に設定しました。`,
           read: false,
           createdAt: null as any,
+          type: 'assignee_changed',
         }).catch((err) => console.error('通知作成エラー:', err));
       }
     }
@@ -542,7 +544,8 @@ export class TasksService {
     Promise.all(notificationPromises).catch((err) => console.error('通知作成エラー:', err));
     try {
       await this.spawnRecurrence(task);
-    } catch {
+    } catch (e) {
+      console.error('繰り返し次回生成エラー:', e);
       throw new RecurrenceGenerationError(() => this.retryRecurrence(taskId));
     } finally {
       if (task.parentId) await this.syncParentEstimate(task.parentId);
@@ -1219,8 +1222,26 @@ export class TasksService {
   }
 
   async deleteComment(taskId: string, commentId: string): Promise<void> {
-    const ref = doc(this.firestore, 'tasks', taskId, 'comments', commentId);
-    await deleteDoc(ref);
+    const commentRef = doc(this.firestore, 'tasks', taskId, 'comments', commentId);
+    const commentSnap = await getDoc(commentRef);
+    const commentText = commentSnap.exists() ? commentSnap.data()['text'] : null;
+
+    await deleteDoc(commentRef);
+
+    if (commentText) {
+      this.removeNotificationsByComment(taskId, commentText).catch(() => {});
+    }
+  }
+
+  private async removeNotificationsByComment(taskId: string, text: string): Promise<void> {
+    for (const member of this.members()) {
+      const notifCol = collection(this.firestore, 'members', member.uid, 'notifications');
+      const q = query(notifCol, where('taskId', '==', taskId), where('text', '==', text), where('type', '==', 'comment'));
+      const snap = await getDocs(q);
+      for (const d of snap.docs) {
+        await deleteDoc(d.ref);
+      }
+    }
   }
 
   // 自分が担当するタスクへの新着コメントを監視
@@ -1228,13 +1249,12 @@ export class TasksService {
     myUid: string,
     onNewComment: (taskTitle: string, authorName: string, text: string) => void,
   ): void {
-    const myTasks = this.tasks().filter((t) => t.assigneeId === myUid && t.status !== '完了');
+    const myTasks = this.tasks().filter((t) => t.assigneeId === myUid && t.status !== '完了' && t.status !== 'アーカイブ済み');
     const currentTaskIds = new Set(myTasks.map((t) => t.id));
 
-    // 不要になったリスナーを解除
-    for (const [taskId, sub] of this.watchedTaskSubs) {
+    for (const [taskId, unsub] of this.watchedTaskSubs) {
       if (!currentTaskIds.has(taskId)) {
-        sub.unsubscribe();
+        unsub();
         this.watchedTaskSubs.delete(taskId);
       }
     }
@@ -1248,23 +1268,22 @@ export class TasksService {
       let initialized = false;
       let knownCount = 0;
 
-      runInInjectionContext(this.injector, () => {
-        const sub = collectionData(q, { idField: 'id' }).subscribe(async (comments: any[]) => {
-          if (!initialized) {
-            knownCount = comments.length;
-            initialized = true;
-            return;
+      const unsub = onSnapshot(q, (snapshot) => {
+        const docs = snapshot.docs;
+        if (!initialized) {
+          knownCount = docs.length;
+          initialized = true;
+          return;
+        }
+        if (docs.length > knownCount) {
+          const lastDoc = docs[docs.length - 1].data();
+          if (lastDoc['authorId'] !== myUid) {
+            onNewComment(task.title, lastDoc['authorName'] ?? '', lastDoc['text'] ?? '');
           }
-          if (comments.length > knownCount) {
-            const newComment = comments[comments.length - 1];
-            if (newComment.authorId !== myUid) {
-              onNewComment(task.title, newComment.authorName, newComment.text);
-            }
-            knownCount = comments.length;
-          }
-        });
-        this.watchedTaskSubs.set(task.id, sub);
+          knownCount = docs.length;
+        }
       });
+      this.watchedTaskSubs.set(task.id, unsub);
     });
   }
 
@@ -1449,7 +1468,8 @@ export class TasksService {
     const predecessors = new Set(tasks.map(task => task.recurrencePreviousTaskId).filter(Boolean));
     return tasks.filter(task => !!task.recurrence &&
       (task.status === '完了' || task.status === 'アーカイブ済み') &&
-      !task.recurrenceNextTaskId && !predecessors.has(task.id) && this.canDeleteTask(task));
+      !task.recurrenceNextTaskId && !predecessors.has(task.id) && this.canDeleteTask(task) &&
+      !this.completionRequests.has(task.id));
   }
 
   async retryRecurrence(taskId: string): Promise<void> {
