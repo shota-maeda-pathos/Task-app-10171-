@@ -1,3 +1,4 @@
+import { calculateLoadPercent, formatWorkHours, UNKNOWN_LOAD } from '../../core/utils/load-display';
 import { buildCalendarTimeOff, CalendarTimeOff } from '../../core/utils/calendar-time-off';
 import {
   ElementRef,
@@ -747,10 +748,12 @@ export class MyTasksComponent {
   weeklyCapacity = computed(() => {
     const uid = this.metricsUid();
     if (!uid) return 0;
-    return this.tasksService.getEffectiveCapacity(uid, 0) || 0;
+    return this.tasksService.getEffectiveCapacity(uid, 0);
   });
 
   Math = Math;
+  formatHours = formatWorkHours;
+  loadPercent = calculateLoadPercent;
   forecastLabels = getForecastWeekLabels();
 
   forecastWeekly = computed(() => {
@@ -760,6 +763,7 @@ export class MyTasksComponent {
   });
 
   loadLevel(pct: number): string {
+    if (pct === UNKNOWN_LOAD || !Number.isFinite(pct)) return 'unknown';
     if (pct < 0) return 'danger';
     if (pct >= 100) return 'danger';
     if (pct >= 80) return 'warn';
@@ -767,6 +771,7 @@ export class MyTasksComponent {
   }
 
   loadLabel(pct: number): string {
+    if (pct === UNKNOWN_LOAD || !Number.isFinite(pct)) return '計算できません';
     return pct < 0 ? '稼働予定なし' : pct + '%';
   }
 

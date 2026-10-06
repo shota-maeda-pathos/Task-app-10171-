@@ -14,6 +14,9 @@ describe('My Tasks assignee selection', () => {
     const makeTask = (id: string, assigneeId: string | null, parentId: string | null = null) => ({ id, title: id, assigneeId, parentId, status: '未着手', estimatedHours: 1, focusThisWeek: false, order: 1, blockedBy: [] });
     const tasks = { members, tasks: signal([makeTask('self-task', 'self'), makeTask('other-task', 'other'), makeTask('unassigned-root', null), makeTask('unassigned-child', null, 'other-task')]), teamSettings: signal({ holidays: [] }),
       getMemberFocusHours: vi.fn(() => 7), getMemberFocusTaskCount: vi.fn(() => 2), getFocusLoadPercent: vi.fn(() => 18), getEffectiveCapacity: vi.fn(() => 40), getMemberWeeklyHours: vi.fn(() => [7, 8, 9, 10]), isBlocked: () => false, getBlockingCount: () => 0, getEpicProgress: () => 0 };
+    tasks.getFocusLoadPercent.mockImplementation(() => { tasks.teamSettings(); return 18; });
+    tasks.getEffectiveCapacity.mockImplementation(() => { tasks.teamSettings(); return 40; });
+    tasks.getMemberWeeklyHours.mockImplementation(() => { tasks.teamSettings(); return [7, 8, 9, 10]; });
     await TestBed.configureTestingModule({ imports: [MyTasksComponent], providers: [
       { provide: TasksService, useValue: tasks }, { provide: AuthService, useValue: { currentUser: signal({ uid: 'self' }) } },
       { provide: NotificationService, useValue: { show: vi.fn() } }, { provide: Router, useValue: {} },
@@ -61,6 +64,26 @@ describe('My Tasks assignee selection', () => {
     fixture.detectChanges();
     expect(fixture.componentInstance.myTasks().map(task => task.id)).toEqual(['self-task']);
     expect(fixture.nativeElement.querySelector('.assignee-filter')).toBeNull();
+  });
+  it('shows calculation unavailable and no false numeric capacity when holiday retrieval fails', async () => {
+    const { fixture, tasks } = await setup('manager');
+    tasks.getFocusLoadPercent.mockImplementation(() => { tasks.teamSettings(); return -2; });
+    tasks.getEffectiveCapacity.mockImplementation(() => { tasks.teamSettings(); return Number.NaN; });
+    tasks.getMemberWeeklyHours.mockImplementation(() => { tasks.teamSettings(); return [Number.NaN, Number.NaN, Number.NaN, Number.NaN]; });
+    (tasks.teamSettings as any).set({ holidays: [], _error: true });
+    tasks.members.update(members => [...members]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.summary-card-load .summary-value').textContent.trim()).toBe('計算できません');
+    expect(fixture.nativeElement.textContent).not.toContain('NaN');
+    expect([...fixture.nativeElement.querySelectorAll('.forecast-detail')].every((element: any) => element.textContent.includes('計算できません'))).toBe(true);
+    expect([...fixture.nativeElement.querySelectorAll('.forecast-bar-fill')].every((element: any) => element.style.width === '0%')).toBe(true);
+    tasks.getFocusLoadPercent.mockImplementation(() => { tasks.teamSettings(); return 18; });
+    tasks.getEffectiveCapacity.mockImplementation(() => { tasks.teamSettings(); return 40; });
+    tasks.getMemberWeeklyHours.mockImplementation(() => { tasks.teamSettings(); return [7, 8, 9, 10]; });
+    (tasks.teamSettings as any).set({ holidays: [] });
+    tasks.members.update(members => [...members]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.summary-card-load .summary-value').textContent).toContain('18');
   });
 });
 

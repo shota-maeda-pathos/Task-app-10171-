@@ -57,27 +57,23 @@ async function deleteTaskAtomically(db, taskId, uid) {
     }
     let parentRef;
     let parentHours;
-    let parentFocusHours;
     const parentId = root.data().parentId;
     if (parentId && !seen.has(parentId)) {
       if (!validId(parentId)) throw new HttpsError('failed-precondition', '親タスクIDが不正です。');
       parentRef = db.collection('tasks').doc(parentId);
       const parent = await tx.get(parentRef);
       if (parent.exists) {
-        parentFocusHours = parent.data().focusHours ?? 0;
         const siblings = await tx.get(db.collection('tasks').where('parentId', '==', parentId));
-        parentHours = siblings.docs.filter(s => !seen.has(s.id) && !['完了', 'アーカイブ済み'].includes(s.data().status))
+        const childTotal = siblings.docs.filter(s => !seen.has(s.id))
           .reduce((sum, s) => sum + (s.data().estimatedHours ?? 0), 0);
+        if (childTotal > (parent.data().estimatedHours ?? 0)) parentHours = childTotal;
       }
     }
     // No mutation occurs until the complete tree and all permissions are checked.
     for (const ref of records) tx.delete(ref);
     for (const id of seen) tx.create(db.collection('taskDeletionMarkers').doc(id), { jobId: taskId });
     if (parentHours !== undefined) {
-      const parentUpdates = { estimatedHours: parentHours };
-      // The parent's weekly budget cannot outlive its remaining child work.
-      if (parentFocusHours > parentHours) parentUpdates.focusHours = parentHours;
-      tx.update(parentRef, parentUpdates);
+      tx.update(parentRef, { estimatedHours: parentHours });
     }
     tx.create(jobRef, {
       requestedBy: uid, taskId, status: files.size ? 'pending' : 'complete', remainingPaths: [...files],

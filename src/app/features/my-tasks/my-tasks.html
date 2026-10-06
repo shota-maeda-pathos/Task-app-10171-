@@ -40,7 +40,7 @@
           [style.width.%]="focusLoadPct() < 0 ? 0 : Math.min(focusLoadPct(), 100)"
         ></div>
       </div>
-      <span class="summary-sub">@if (hasAssigneeMetrics()) { {{ focusHours() }}h / {{ weeklyCapacity() }}h } @else { 担当者がいないため対象外 }</span>
+      <span class="summary-sub">@if (hasAssigneeMetrics()) { {{ formatHours(focusHours()) }}h / {{ formatHours(weeklyCapacity()) }}h } @else { 担当者がいないため対象外 }</span>
     </div>
     <div class="summary-card summary-card-focus">
       <div class="summary-heading">
@@ -52,9 +52,9 @@
         <span class="summary-label">フォーカスの残り</span>
       </div>
       <div class="summary-metric">
-        <span class="summary-value">@if (hasAssigneeMetrics()) { {{ remainingFocusHours() }}<span class="summary-unit">h</span> } @else { — }</span>
+        <span class="summary-value">@if (hasAssigneeMetrics()) { {{ formatHours(remainingFocusHours()) }}<span class="summary-unit">h</span> } @else { — }</span>
       </div>
-      <span class="summary-sub">@if (hasAssigneeMetrics()) { 今週やる {{ focusTaskCount() }}件 / {{ weeklyCapacity() }}h } @else { 担当者がいないため対象外 }</span>
+      <span class="summary-sub">@if (hasAssigneeMetrics()) { 今週やる {{ focusTaskCount() }}件 / {{ formatHours(weeklyCapacity()) }}h } @else { 担当者がいないため対象外 }</span>
     </div>
     <div
       class="summary-card summary-card-alert"
@@ -136,7 +136,7 @@
     <div class="forecast-bars">
       @for (hours of forecastWeekly(); track $index) {
         @let cap = getWeekCapacity($index);
-        @let pct = cap > 0 ? Math.round((hours / cap) * 100) : (hours > 0 ? -1 : 0);
+        @let pct = loadPercent(hours, cap);
         <div class="forecast-week">
           <div class="forecast-label">{{ forecastLabels[$index] }}</div>
           <div class="forecast-bar-track">
@@ -148,7 +148,7 @@
           </div>
           <div class="forecast-detail">
             @if (hasAssigneeMetrics()) {
-              {{ hours }}h <span class="forecast-pct" [class]="loadLevel(pct)">({{ loadLabel(pct) }})</span>
+              {{ formatHours(hours) }}h <span class="forecast-pct" [class]="loadLevel(pct)">({{ loadLabel(pct) }})</span>
             } @else { — }
           </div>
         </div>

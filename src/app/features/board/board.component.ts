@@ -1,3 +1,4 @@
+import { calculateLoadPercent, formatWorkHours, UNKNOWN_LOAD } from '../../core/utils/load-display';
 import {
   ElementRef,
   ViewChild,
@@ -23,7 +24,7 @@ import { Timestamp } from '@angular/fire/firestore';
 import { saveMemberOrder, sortMembersBySavedOrder } from '../../core/utils/member-order';
 import { getWeekMonday, getWeekIndex, getForecastWeekLabels } from '../../core/utils/week-utils';
 
-type LoadLevel = 'ok' | 'warn' | 'danger';
+type LoadLevel = 'ok' | 'warn' | 'danger' | 'unknown';
 
 interface PendingAdd {
   kind: 'root' | 'sub' | 'edit';
@@ -49,6 +50,8 @@ export class BoardComponent {
   auth = inject(AuthService);
   notificationService = inject(NotificationService);
   Math = Math;
+  formatHours = formatWorkHours;
+  loadPercent = calculateLoadPercent;
   forecastLabels = getForecastWeekLabels();
   private destroyRef = inject(DestroyRef);
   private cdr = inject(ChangeDetectorRef);
@@ -1034,6 +1037,7 @@ export class BoardComponent {
   }
 
   loadLevel(pct: number): LoadLevel {
+    if (pct === UNKNOWN_LOAD || !Number.isFinite(pct)) return 'unknown';
     if (pct < 0) return 'danger';
     if (pct >= 100) return 'danger';
     if (pct >= 80) return 'warn';
@@ -1041,6 +1045,7 @@ export class BoardComponent {
   }
 
   loadLabel(pct: number): string {
+    if (pct === UNKNOWN_LOAD || !Number.isFinite(pct)) return '計算できません';
     return pct < 0 ? '稼働予定なし' : pct + '%';
   }
 
@@ -1054,6 +1059,7 @@ export class BoardComponent {
       .members()
       .filter((m) => m.uid !== excludeId)
       .map((m) => ({ uid: m.uid, name: m.name, pct: this.tasksService.getFocusLoadPercent(m.uid) }))
+      .filter(candidate => candidate.pct !== UNKNOWN_LOAD && Number.isFinite(candidate.pct))
       .sort((a, b) => a.pct - b.pct);
   }
 

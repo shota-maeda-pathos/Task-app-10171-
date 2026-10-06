@@ -1233,6 +1233,13 @@ import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/model
         .toast {
           min-width: unset;
         }
+        .fab-row {
+          flex-direction: column;
+          gap: 10px;
+        }
+        .fab-field {
+          width: 100%;
+        }
       }
       @media (min-width: 769px) and (max-width: 1024px) {
         .app-header {

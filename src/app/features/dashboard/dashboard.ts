@@ -1,3 +1,4 @@
+import { calculateLoadPercent, formatWorkHours, UNKNOWN_LOAD } from '../../core/utils/load-display';
 import { buildCalendarTimeOff, CalendarTimeOff } from '../../core/utils/calendar-time-off';
 import { Component, HostListener, inject, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -47,6 +48,8 @@ export class DashboardComponent {
   private router = inject(Router);
   isMobile = signal(typeof window !== 'undefined' && window.innerWidth <= 768);
   Math = Math;
+  formatHours = formatWorkHours;
+  loadPercent = calculateLoadPercent;
   forecastLabels = computed(() => getForecastWeekLabels());
 
   @HostListener('window:resize')
@@ -227,6 +230,7 @@ export class DashboardComponent {
   }
 
   loadLevel(pct: number): string {
+    if (pct === UNKNOWN_LOAD || !Number.isFinite(pct)) return 'unknown';
     if (pct < 0) return 'danger';
     if (pct >= 100) return 'danger';
     if (pct >= 80) return 'warn';
@@ -234,6 +238,7 @@ export class DashboardComponent {
   }
 
   loadLabel(pct: number): string {
+    if (pct === UNKNOWN_LOAD || !Number.isFinite(pct)) return '計算できません';
     return pct < 0 ? '稼働予定なし' : pct + '%';
   }
   // カレンダー用: 今月と来月の日付グリッドを生成

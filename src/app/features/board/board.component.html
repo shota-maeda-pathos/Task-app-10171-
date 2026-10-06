@@ -134,6 +134,8 @@
               <span class="member-pct" style="margin-left: 8px; flex-shrink: 0" [class]="level"
                 >{{ pct }}%</span
               >
+            } @else {
+              <span class="member-pct" [class]="level">{{ loadLabel(pct) }}</span>
             }
           </div>
           <div class="bar-track">
@@ -141,13 +143,13 @@
           </div>
           <div class="member-detail">
             {{ tasksService.getMemberFocusTaskCount(member.uid) }}件フォーカス |
-            {{ tasksService.getMemberFocusHours(member.uid) }}h /
+            {{ formatHours(tasksService.getMemberFocusHours(member.uid)) }}h /
             <button
               class="capacity-btn"
               [attr.title]="'週あたりの設定時間 ' + member.weeklyCapacityHours + 'h を変更'"
               (click)="openCapacityEdit(member)"
             >
-              {{ Math.round(tasksService.getEffectiveCapacity(member.uid, 0) * 10) / 10 }}h
+              {{ formatHours(Math.round(tasksService.getEffectiveCapacity(member.uid, 0) * 10) / 10) }}h
             </button>
             @let myWorkingDays = tasksService.getWorkingDays(member.uid, 0);
             @if (myWorkingDays < 5) {
@@ -162,11 +164,11 @@
             <div class="member-forecast">
               @for (hours of tasksService.getMemberWeeklyHours(member.uid); track $index) {
                 @let cap = tasksService.getEffectiveCapacity(member.uid, $index);
-                @let fpct = cap > 0 ? Math.round((hours / cap) * 100) : (hours > 0 ? -1 : 0);
+                @let fpct = loadPercent(hours, cap);
                 <div
                   class="mini-bar"
                   [title]="
-                    forecastLabels[$index] + ': ' + hours + 'h / ' + Math.round(cap) + 'h (' + loadLabel(fpct) + ')'
+                    forecastLabels[$index] + ': ' + formatHours(hours) + 'h / ' + formatHours(Math.round(cap)) + 'h (' + loadLabel(fpct) + ')'
                   "
                 >
                   <div class="mini-bar-label">{{ forecastLabels[$index] }}</div>
@@ -177,7 +179,7 @@
                       [style.width.%]="fpct < 0 ? 0 : fpct > 100 ? 100 : fpct"
                     ></div>
                   </div>
-                  <div class="mini-bar-hours">{{ hours }}h</div>
+                  <div class="mini-bar-hours">{{ formatHours(hours) }}h</div>
                 </div>
               }
             </div>
@@ -244,6 +246,8 @@
                 <span class="member-pct" style="margin-left: 8px; flex-shrink: 0" [class]="level"
                   >{{ pct }}%</span
                 >
+              } @else {
+                <span class="member-pct" [class]="level">{{ loadLabel(pct) }}</span>
               }
             </div>
             <div class="bar-track">
@@ -251,13 +255,13 @@
             </div>
             <div class="member-detail">
               {{ tasksService.getMemberFocusTaskCount(member.uid) }}件フォーカス |
-              {{ tasksService.getMemberFocusHours(member.uid) }}h /
+              {{ formatHours(tasksService.getMemberFocusHours(member.uid)) }}h /
               <button
                 class="capacity-btn"
                 [attr.title]="'週あたりの設定時間 ' + member.weeklyCapacityHours + 'h を変更'"
                 (click)="openCapacityEdit(member)"
               >
-                {{ Math.round(tasksService.getEffectiveCapacity(member.uid, 0) * 10) / 10 }}h
+                {{ formatHours(Math.round(tasksService.getEffectiveCapacity(member.uid, 0) * 10) / 10) }}h
               </button>
               @let otherWorkingDays = tasksService.getWorkingDays(member.uid, 0);
               @if (otherWorkingDays < 5) {
@@ -272,11 +276,11 @@
               <div class="member-forecast">
                 @for (hours of tasksService.getMemberWeeklyHours(member.uid); track $index) {
                   @let cap2 = tasksService.getEffectiveCapacity(member.uid, $index);
-                  @let fpct = cap2 > 0 ? Math.round((hours / cap2) * 100) : (hours > 0 ? -1 : 0);
+                  @let fpct = loadPercent(hours, cap2);
                   <div
                     class="mini-bar"
                     [title]="
-                      forecastLabels[$index] + ': ' + hours + 'h / ' + Math.round(cap2) + 'h (' + loadLabel(fpct) + ')'
+                      forecastLabels[$index] + ': ' + formatHours(hours) + 'h / ' + formatHours(Math.round(cap2)) + 'h (' + loadLabel(fpct) + ')'
                     "
                   >
                     <div class="mini-bar-label">{{ forecastLabels[$index] }}</div>
@@ -287,7 +291,7 @@
                         [style.width.%]="fpct < 0 ? 0 : fpct > 100 ? 100 : fpct"
                       ></div>
                     </div>
-                    <div class="mini-bar-hours">{{ hours }}h</div>
+                    <div class="mini-bar-hours">{{ formatHours(hours) }}h</div>
                   </div>
                 }
               </div>
@@ -1418,10 +1422,10 @@
                         <div
                           class="lp-fill"
                           [class]="level"
-                          [style.width.%]="pct > 100 ? 100 : pct"
+                          [style.width.%]="pct < 0 ? 0 : pct > 100 ? 100 : pct"
                         ></div>
                       </div>
-                      <span>{{ pct }}%</span>
+                      <span>{{ loadLabel(pct) }}</span>
                     </div>
                     @if (level === 'danger') {
                       <div class="warning-box">
@@ -1449,7 +1453,7 @@
                             >
                               <option value="" disabled selected>代わりの担当者を選ぶ</option>
                               @for (c of getAlternativeCandidates(newRootAssignee); track c.uid) {
-                                <option [value]="c.uid">{{ c.name }}（{{ c.pct }}%）</option>
+                                <option [value]="c.uid">{{ c.name }}（{{ loadLabel(c.pct) }}）</option>
                               }
                             </select>
                           </div>
@@ -2011,10 +2015,10 @@
                                 <div
                                   class="lp-fill"
                                   [class]="level"
-                                  [style.width.%]="pct > 100 ? 100 : pct"
+                                  [style.width.%]="pct < 0 ? 0 : pct > 100 ? 100 : pct"
                                 ></div>
                               </div>
-                              <span>{{ pct }}%</span>
+                              <span>{{ loadLabel(pct) }}</span>
                             </div>
                             @if (level === 'danger') {
                               <div class="warning-box">
@@ -2336,7 +2340,9 @@
   <div class="modal-overlay" (click)="cancelDelete()">
     <div class="modal" (click)="$event.stopPropagation()">
       <h3>「{{ deletingTask.title }}」を削除しますか?</h3>
-      <p class="modal-sub">他の人が投稿した添付ファイル・コメント・履歴も削除します。</p>
+      @if (!deletingTask.parentId) {
+        <p class="modal-sub">他の人が投稿した添付ファイル・コメント・履歴も削除します。</p>
+      }
       @if (deletingChildCount > 0) {
         <p class="modal-sub">子タスク{{ deletingChildCount }}件も一緒に削除されます。</p>
       } @else {

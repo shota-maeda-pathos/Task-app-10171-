@@ -1,6 +1,6 @@
+import { deletionMocks } from './deletion-test-mocks';
 import { signal } from '@angular/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { deletionMocks } from './deletion-test-mocks';
 import { TasksService } from './tasks.service';
 import { DashboardComponent } from '../../features/dashboard/dashboard';
 import { BoardComponent } from '../../features/board/board.component';
@@ -10,17 +10,134 @@ import { getWeekMonday } from '../utils/week-utils';
 
 const { invoke } = deletionMocks;
 
-// Register at the test entry point so imports from other component suites cannot
-// initialize the real Firebase modules before these mocks.
-vi.mock('firebase/firestore', async importOriginal => {
-  const { deletionMocks: mocks } = await import('./deletion-test-mocks');
-  return { ...await importOriginal<typeof import('firebase/firestore')>(),
-    doc: mocks.doc, getDoc: mocks.getDoc, deleteDoc: mocks.deleteDoc,
-    setDoc: mocks.setDoc, updateDoc: mocks.updateDoc };
+describe('completed child workload never returns to the parent assignee', () => {
+  function setup(otherStatus = '未着手', ownStatus = '未着手') {
+    const service: any = Object.create(TasksService.prototype);
+    const tasks = signal([
+      { id: 'parent', parentId: null, assigneeId: 'owner', status: '未着手', estimatedHours: 11, focusHours: 11, focusThisWeek: true },
+      { id: 'other-child', parentId: 'parent', assigneeId: 'other', status: otherStatus, estimatedHours: 2, focusThisWeek: false },
+      { id: 'own-child', parentId: 'parent', assigneeId: 'owner', status: ownStatus, estimatedHours: 6, focusThisWeek: false },
+      { id: 'remaining-child', parentId: 'parent', assigneeId: 'owner', status: '未着手', estimatedHours: 3, focusThisWeek: false },
+    ]);
+    Object.assign(service, { tasks });
+    return service;
+  }
+  for (const [otherStatus, ownStatus, ownerHours, otherHours] of [
+    ['未着手', '未着手', 9, 2], ['完了', '未着手', 9, 0], ['完了', '完了', 3, 0], ['アーカイブ済み', '完了', 3, 0],
+  ] as const) {
+    it(`counts owner ${ownerHours}h and other ${otherHours}h when child statuses are ${otherStatus}/${ownStatus}`, () => {
+      const service = setup(otherStatus, ownStatus);
+      for (const [uid, expected] of [['owner', ownerHours], ['other', otherHours]] as const) {
+        expect(service.getMemberActiveHours(uid)).toBe(expected);
+        expect(service.getMemberFocusHours(uid)).toBe(expected);
+        expect(service.getMemberWeeklyHours(uid)[0]).toBe(expected);
+      }
+      expect(service.tasks()[0].estimatedHours).toBe(11);
+      expect(service.tasks()[0].focusHours).toBe(11);
+    });
+  }
+  it('also excludes completed child work from future-week forecasts', () => {
+    const service = setup('完了', '完了');
+    const nextWeek = getWeekMonday(new Date()); nextWeek.setDate(nextWeek.getDate() + 7);
+    service.tasks.update((tasks: any[]) => tasks.map(task => task.id === 'parent' ? { ...task, focusThisWeek: false, targetWeekStart: Timestamp.fromDate(nextWeek) } : task));
+    expect(service.getMemberWeeklyHours('owner')).toEqual([0, 3, 0, 0]);
+    expect(service.getMemberWeeklyHours('other')).toEqual([0, 0, 0, 0]);
+  });
+  it('preserves the unallocated portion of a parent estimate', () => {
+    const service = setup('完了', '完了');
+    service.tasks.update((tasks: any[]) => tasks.map(task => task.id === 'parent' ? { ...task, estimatedHours: 14, focusHours: 14 } : task));
+    expect(service.getMemberActiveHours('owner')).toBe(6);
+    expect(service.getMemberFocusHours('owner')).toBe(6);
+  });
+  it('does not restore completed unassigned child work to the parent', () => {
+    const service = setup('完了', '完了');
+    service.tasks.update((tasks: any[]) => tasks.map(task => task.id === 'other-child' ? { ...task, assigneeId: null } : task));
+    expect(service.getMemberFocusHours('owner')).toBe(3);
+  });
 });
-vi.mock('firebase/functions', async importOriginal => {
-  const { deletionMocks: mocks } = await import('./deletion-test-mocks');
-  return { ...await importOriginal<typeof import('firebase/functions')>(), httpsCallable: () => mocks.invoke };
+
+describe('parent estimate preservation', () => {
+  it('rechecks the parent estimate when a conflicting write triggers a transaction retry', async () => {
+    const service: any = Object.create(TasksService.prototype);
+    Object.assign(service, { firestore: {}, tasksCollection: {} });
+    deletionMocks.getDocs.mockResolvedValue({ docs: [{ data: () => ({ estimatedHours: 10 }) }] });
+    const abandonedUpdate = vi.fn();
+    const committedUpdate = vi.fn();
+    deletionMocks.runTransaction.mockImplementationOnce(async (_firestore, callback) => {
+      await callback({ get: async () => ({ exists: () => true, data: () => ({ estimatedHours: 8 }) }), update: abandonedUpdate });
+      // Firestore discards the conflicting attempt; another user has committed 12h.
+      await callback({ get: async () => ({ exists: () => true, data: () => ({ estimatedHours: 12 }) }), update: committedUpdate });
+    });
+    await service.syncParentEstimate('parent');
+    expect(abandonedUpdate).toHaveBeenCalledExactlyOnceWith(expect.anything(), { estimatedHours: 10 });
+    expect(committedUpdate).not.toHaveBeenCalled();
+  });
+  it('does not recreate a parent deleted before transaction commit', async () => {
+    const service: any = Object.create(TasksService.prototype);
+    Object.assign(service, { firestore: {}, tasksCollection: {} });
+    deletionMocks.getDocs.mockResolvedValue({ docs: [{ data: () => ({ estimatedHours: 10 }) }] });
+    deletionMocks.getDoc.mockResolvedValue({ exists: () => false });
+    deletionMocks.updateDoc.mockClear();
+    await service.syncParentEstimate('parent');
+    expect(deletionMocks.updateDoc).not.toHaveBeenCalled();
+  });
+  for (const [parentHours, childHours, expected] of [[8, 2, 8], [8, 10, 10], [10, 1, 10], [8, 0, 8]]) {
+    it(`keeps parent ${parentHours}h with child total ${childHours}h at ${expected}h`, async () => {
+      const service: any = Object.create(TasksService.prototype);
+      Object.assign(service, { firestore: {}, tasksCollection: {} });
+      deletionMocks.updateDoc.mockClear();
+      deletionMocks.getDoc.mockResolvedValue({ exists: () => true, data: () => ({ estimatedHours: parentHours, focusHours: 8 }) });
+      deletionMocks.getDocs.mockResolvedValue({ docs: [{ data: () => ({ estimatedHours: childHours, status: '完了' }) }] });
+      await service.syncParentEstimate('parent');
+      if (expected > parentHours) expect(deletionMocks.updateDoc).toHaveBeenCalledExactlyOnceWith(expect.anything(), { estimatedHours: expected });
+      else expect(deletionMocks.updateDoc).not.toHaveBeenCalled();
+    });
+  }
+});
+
+describe('holiday lookup failure', () => {
+  function setup() {
+    const service: any = Object.create(TasksService.prototype);
+    Object.assign(service, {
+      teamSettings: signal({ holidays: [], _error: true }),
+      members: signal([{ uid: 'user', weeklyCapacityHours: 40, leaves: [] }]),
+      tasks: signal([{ id: 'task', assigneeId: 'user', parentId: null, status: '未着手', estimatedHours: 4,
+        focusThisWeek: true, focusHours: 1, recurrence: 'daily' }]),
+    });
+    return service;
+  }
+  it('does not calculate capacity or load from an empty fallback holiday list', () => {
+    const service = setup();
+    expect(service.getWorkingDays('user', 0)).toBeNaN();
+    expect(service.getEffectiveCapacity('user', 0)).toBeNaN();
+    expect(service.getFocusLoadPercent('user')).toBe(-2);
+    expect(service.getWeeklyLoadPercent('user', 1, 1)).toBe(-2);
+    expect(service.getMemberFocusHours('user')).toBe(1);
+    expect(service.getMemberWeeklyHours('user')[1]).toBeNaN();
+  });
+  it('restores normal calculations when holiday settings are available again', () => {
+    const service = setup();
+    service.teamSettings.set({ holidays: [] });
+    expect(service.getWorkingDays('user', 0)).toBe(5);
+    expect(service.getEffectiveCapacity('user', 0)).toBe(40);
+    expect(service.getFocusLoadPercent('user')).toBe(3);
+    expect(service.getMemberWeeklyHours('user')).toEqual([1, 20, 20, 20]);
+  });
+  it('distinguishes a genuine zero capacity from a lookup failure', () => {
+    const service = setup();
+    service.teamSettings.set({ holidays: [] });
+    service.members.set([{ uid: 'user', weeklyCapacityHours: 0 }]);
+    expect(service.getFocusLoadPercent('user')).toBe(-1);
+  });
+  for (const Component of [BoardComponent, MyTasksComponent, DashboardComponent]) {
+    it(`${Component.name} displays lookup failure without a false load category`, () => {
+      const component: any = Object.create(Component.prototype);
+      expect(component.loadLabel(-2)).toBe('計算できません');
+      expect(component.loadLevel(-2)).toBe('unknown');
+      expect(component.loadLabel(-1)).toBe('稼働予定なし');
+      expect(component.loadLabel(80)).toBe('80%');
+    });
+  }
 });
 
 describe('comment drafts during submission', () => {

@@ -1,4 +1,5 @@
 import { leaveDayFraction, mergeMemberLeaves } from '../utils/leave-utils';
+import { calculateLoadPercent } from '../utils/load-display';
 import { observeActiveUser } from './active-user';
 import { Injectable, inject, Injector, runInInjectionContext, computed, effect } from '@angular/core';
 import { Auth, user } from '@angular/fire/auth';
@@ -274,29 +275,19 @@ export class TasksService {
 
   private async syncParentEstimate(parentId: string): Promise<void> {
     const parentRef = doc(this.firestore, 'tasks', parentId);
-    const parentSnap = await getDoc(parentRef);
-    if (!parentSnap.exists()) return;
-    const parentData = parentSnap.data() as Task;
-
     const childrenQuery = query(this.tasksCollection, where('parentId', '==', parentId));
     const childrenSnap = await getDocs(childrenQuery);
     const childTotal = childrenSnap.docs
-      .filter((d) => {
-        const s = (d.data() as Task).status;
-        return s !== '完了' && s !== 'アーカイブ済み';
-      })
       .reduce((sum, d) => sum + ((d.data() as Task).estimatedHours ?? 0), 0);
 
-    const updates: Record<string, any> = {};
-    if (childTotal !== (parentData.estimatedHours ?? 0)) {
-      updates['estimatedHours'] = childTotal;
-    }
-    if ((parentData.focusHours ?? 0) > childTotal) {
-      updates['focusHours'] = childTotal;
-    }
-    if (Object.keys(updates).length > 0) {
-      await updateDoc(parentRef, updates);
-    }
+    await runTransaction(this.firestore, async transaction => {
+      const parentSnap = await transaction.get(parentRef);
+      if (!parentSnap.exists()) return;
+      const parentData = parentSnap.data() as Task;
+      if (childTotal > (parentData.estimatedHours ?? 0)) {
+        transaction.update(parentRef, { estimatedHours: childTotal });
+      }
+    });
   }
 
   async updateStatus(taskId: string, status: TaskStatus): Promise<void> {
@@ -867,6 +858,7 @@ export class TasksService {
   }
 
   getWorkingDays(memberId: string, weekIndex: number): number {
+    if (this.teamSettings()?._error) return Number.NaN;
     const monday = getWeekMonday(new Date());
     const weekStart = new Date(monday);
     weekStart.setDate(weekStart.getDate() + weekIndex * 7);
@@ -906,7 +898,7 @@ export class TasksService {
       if (children.length > 0) {
         const assignedChildHours = children
           .filter(
-            (c) => c.status !== '完了' && c.status !== 'アーカイブ済み' && c.assigneeId !== null,
+            (c) => c.assigneeId !== null || c.status === '完了' || c.status === 'アーカイブ済み',
           )
           .reduce((sum, c) => sum + (c.estimatedHours ?? 0), 0);
         const remaining = Math.max(0, (t.estimatedHours ?? 0) - assignedChildHours);
@@ -950,9 +942,7 @@ export class TasksService {
         const assignedChildHours = children
           .filter(
             (c) =>
-              c.status !== '完了' &&
-              c.status !== 'アーカイブ済み' &&
-              c.assigneeId !== null,
+              c.assigneeId !== null || c.status === '完了' || c.status === 'アーカイブ済み',
           )
           .reduce((sum, c) => sum + (c.estimatedHours ?? 0), 0);
         const remaining = Math.max(0, hours - assignedChildHours);
@@ -982,8 +972,7 @@ export class TasksService {
   getFocusLoadPercent(memberId: string): number {
     const focusHours = this.getMemberFocusHours(memberId);
     const cap = this.getEffectiveCapacity(memberId, 0);
-    if (cap <= 0) return focusHours > 0 ? -1 : 0;
-    return Math.round((focusHours / cap) * 100);
+    return calculateLoadPercent(focusHours, cap);
   }
 
   getMemberFocusTaskCount(memberId: string): number {
@@ -1100,9 +1089,7 @@ export class TasksService {
           const assignedChildHours = children
             .filter(
               (c) =>
-                c.status !== '完了' &&
-                c.status !== 'アーカイブ済み' &&
-                c.assigneeId !== null,
+                c.assigneeId !== null || c.status === '完了' || c.status === 'アーカイブ済み',
             )
             .reduce((sum, c) => sum + (c.estimatedHours ?? 0), 0);
           const remaining = Math.max(0, hours - assignedChildHours);
@@ -1161,6 +1148,7 @@ export class TasksService {
   }
 
   getEffectiveCapacity(memberId: string, weekIndex: number): number {
+    if (this.teamSettings()?._error) return Number.NaN;
     const member = this.members().find((m) => m.uid === memberId);
     if (!member || !member.weeklyCapacityHours || member.weeklyCapacityHours <= 0) return 0;
     const workingDays = this.getWorkingDays(memberId, weekIndex);
@@ -1169,8 +1157,7 @@ export class TasksService {
 
   getWeeklyLoadPercent(memberId: string, weekHours: number, weekIndex: number = 0): number {
     const cap = this.getEffectiveCapacity(memberId, weekIndex);
-    if (cap <= 0) return weekHours > 0 ? -1 : 0;
-    return Math.round((weekHours / cap) * 100);
+    return calculateLoadPercent(weekHours, cap);
   }
 
   getComments(taskId: string): Observable<TaskComment[]> {

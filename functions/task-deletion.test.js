@@ -72,7 +72,7 @@ test('assignee deletes the complete tree and foreign posts atomically, with pare
   const db = fixture();
   await deleteTaskAtomically(db, 'root', 'user');
   for (const key of ['tasks/root', 'tasks/child', 'tasks/root/attachments/file', 'tasks/root/comments/comment', 'tasks/child/activities/history']) assert.equal(db.records.has(key), false);
-  assert.equal(db.records.get('tasks/parent').estimatedHours, 2);
+  assert.equal(db.records.get('tasks/parent').estimatedHours, 7);
   assert.deepEqual(db.records.get('taskDeletionJobs/root').remainingPaths, ['task-attachments/root/other/file.jpg']);
   assert.equal(db.records.get('taskDeletionMarkers/child').jobId, 'root');
 });
@@ -82,22 +82,22 @@ test('a forbidden child leaves every record unchanged', async () => {
   await assert.rejects(deleteTaskAtomically(db, 'root', 'user'), { code: 'permission-denied' });
   assert.deepEqual(db.records, before); assert.equal(db.operations.length, 0);
 });
-test('deletion excludes completed and archived siblings from parent remaining hours', async () => {
+test('deletion preserves parent estimate and weekly hours with completed siblings', async () => {
   const db = fixture();
   db.records.set('tasks/completed', { parentId: 'parent', estimatedHours: 8, status: '完了' });
   db.records.set('tasks/archived', { parentId: 'parent', estimatedHours: 4, status: 'アーカイブ済み' });
   db.records.set('tasks/parent', { createdBy: 'creator', estimatedHours: 19, focusHours: 5 });
   await deleteTaskAtomically(db, 'root', 'user');
-  assert.equal(db.records.get('tasks/parent').estimatedHours, 2);
-  assert.equal(db.records.get('tasks/parent').focusHours, 2);
+  assert.equal(db.records.get('tasks/parent').estimatedHours, 19);
+  assert.equal(db.records.get('tasks/parent').focusHours, 5);
 });
-test('deletion clears parent remaining and focus hours when only completed siblings remain', async () => {
+test('deletion preserves parent hours when only completed siblings remain', async () => {
   const db = fixture();
   db.records.set('tasks/sibling', { parentId: 'parent', estimatedHours: 8, status: '完了' });
   db.records.set('tasks/parent', { createdBy: 'creator', estimatedHours: 13, focusHours: 1 });
   await deleteTaskAtomically(db, 'root', 'user');
-  assert.equal(db.records.get('tasks/parent').estimatedHours, 0);
-  assert.equal(db.records.get('tasks/parent').focusHours, 0);
+  assert.equal(db.records.get('tasks/parent').estimatedHours, 13);
+  assert.equal(db.records.get('tasks/parent').focusHours, 1);
 });
 test('commit failure preserves task, attachments and history; retry succeeds', async () => {
   const db = fixture(); const before = new Map(db.records); db.failCommit = true;
