@@ -1393,12 +1393,11 @@ export class App {
 
   constructor() {
     effect(() => this.openHomeOnStartup(this.auth.currentUser()?.uid ?? null));
-    // トースト通知: uidが変わったときだけ監視を開始する
-    let prevUid: string | null = null;
+    // トースト通知: タスク一覧が変わるたびに監視対象を更新
     effect(() => {
       const uid = this.auth.currentUser()?.uid ?? null;
-      if (!uid || uid === prevUid) return;
-      prevUid = uid;
+      const _tasks = this.tasksService.tasks();
+      if (!uid || _tasks.length === 0) return;
       this.tasksService.watchMyTaskComments(uid, (taskTitle, authorName, text) => {
         this.notificationService.show(
           `「${taskTitle}」に新着コメント`,
