@@ -822,7 +822,7 @@
                   [cdkDropListData]="getSwimlaneTasks(lane.key, rootTasksByColumn()[status])"
                   [cdkDropListConnectedTo]="swimlaneConnectedLists()"
                   [cdkDropListEnterPredicate]="canDropRootTask"
-                  (cdkDropListDropped)="onSwimlaneDrop($event, status)"
+                  (cdkDropListDropped)="onSwimlaneDrop($event, status, lane.key)"
                 >
                   <div class="swimlane-cell-status">
                     <span class="col-dot" [class]="getStatusColor(status)"></span>

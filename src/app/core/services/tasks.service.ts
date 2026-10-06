@@ -5,7 +5,7 @@ import { Injectable, inject, Injector, runInInjectionContext, computed, effect, 
 import { Auth, user } from '@angular/fire/auth';
 import { Storage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from '@angular/fire/storage';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { Observable, switchMap, of, map, catchError } from 'rxjs';
+import { Observable, Subscription, switchMap, of, map, catchError } from 'rxjs';
 import { Firestore, collectionData, docData } from '@angular/fire/firestore';
 import { Functions } from '@angular/fire/functions';
 import { httpsCallable } from 'firebase/functions';
@@ -70,7 +70,7 @@ export class TasksService {
   private membersCollection = collection(this.firestore, 'members');
   private templatesCollection = collection(this.firestore, 'taskTemplates');
   private teamSettingsDoc = doc(this.firestore, 'teamSettings', 'default');
-  private watchedTaskIds = new Set<string>();
+  private watchedTaskSubs = new Map<string, Subscription>();
   private weeklyFocusActivated = false;
   private rootReorderQueue: Promise<void> = Promise.resolve();
   private lastRootTaskOrder = 0;
@@ -1229,10 +1229,18 @@ export class TasksService {
     onNewComment: (taskTitle: string, authorName: string, text: string) => void,
   ): void {
     const myTasks = this.tasks().filter((t) => t.assigneeId === myUid && t.status !== '完了');
+    const currentTaskIds = new Set(myTasks.map((t) => t.id));
+
+    // 不要になったリスナーを解除
+    for (const [taskId, sub] of this.watchedTaskSubs) {
+      if (!currentTaskIds.has(taskId)) {
+        sub.unsubscribe();
+        this.watchedTaskSubs.delete(taskId);
+      }
+    }
 
     myTasks.forEach((task) => {
-      if (this.watchedTaskIds.has(task.id)) return;
-      this.watchedTaskIds.add(task.id);
+      if (this.watchedTaskSubs.has(task.id)) return;
 
       const commentsCol = collection(this.firestore, 'tasks', task.id, 'comments');
       const q = query(commentsCol, orderBy('createdAt'));
@@ -1241,7 +1249,7 @@ export class TasksService {
       let knownCount = 0;
 
       runInInjectionContext(this.injector, () => {
-        collectionData(q, { idField: 'id' }).subscribe(async (comments: any[]) => {
+        const sub = collectionData(q, { idField: 'id' }).subscribe(async (comments: any[]) => {
           if (!initialized) {
             knownCount = comments.length;
             initialized = true;
@@ -1250,12 +1258,12 @@ export class TasksService {
           if (comments.length > knownCount) {
             const newComment = comments[comments.length - 1];
             if (newComment.authorId !== myUid) {
-              // トーストだけ表示（通知保存はコメント送信側で行う）
               onNewComment(task.title, newComment.authorName, newComment.text);
             }
             knownCount = comments.length;
           }
         });
+        this.watchedTaskSubs.set(task.id, sub);
       });
     });
   }
@@ -1310,18 +1318,20 @@ export class TasksService {
     const uid = this.auth.currentUser?.uid;
     if (!uid) return;
     const ref = doc(this.firestore, 'tasks', taskId, 'comments', commentId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return;
-    const data = snap.data();
-    const reactions: Record<string, string[]> = data?.['reactions'] ?? {};
-    const users = reactions[emoji] ?? [];
-    if (users.includes(uid)) {
-      reactions[emoji] = users.filter((u) => u !== uid);
-      if (reactions[emoji].length === 0) delete reactions[emoji];
-    } else {
-      reactions[emoji] = [...users, uid];
-    }
-    await updateDoc(ref, { reactions });
+    await runTransaction(this.firestore, async (transaction) => {
+      const snap = await transaction.get(ref);
+      if (!snap.exists()) return;
+      const data = snap.data();
+      const reactions: Record<string, string[]> = { ...(data?.['reactions'] ?? {}) };
+      const users = reactions[emoji] ?? [];
+      if (users.includes(uid)) {
+        reactions[emoji] = users.filter((u) => u !== uid);
+        if (reactions[emoji].length === 0) delete reactions[emoji];
+      } else {
+        reactions[emoji] = [...users, uid];
+      }
+      transaction.update(ref, { reactions });
+    });
   }
 
   // ===== アクティビティログ =====

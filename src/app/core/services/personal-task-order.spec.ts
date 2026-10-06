@@ -116,4 +116,42 @@ describe('personal task order', () => {
     expect(board.tasksService.updateStatus).not.toHaveBeenCalled();
     expect(board.notificationService.show).toHaveBeenCalledWith('権限エラー', expect.any(String));
   });
+
+  for (const [mode, field, destination] of [['assignee', 'assigneeId', 'bob'], ['priority', 'priority', 'high']] as const) {
+    it(`renders a ${mode} lane change before saving and keeps it until acknowledged`, async () => {
+      const task = { id: 'a', status: '未着手', assigneeId: 'alice', priority: 'low' };
+      let finish!: () => void;
+      const tasks = signal([task]);
+      const board = Object.assign(Object.create(BoardComponent.prototype), {
+        auth: { currentUser: () => ({ uid: 'alice' }) },
+        swimlaneMode: () => mode, swimlaneUpdates: signal(new Map()),
+        canMoveTask: () => true, cdr: { detectChanges: vi.fn() },
+        tasksService: { tasks, updateTask: vi.fn(() => new Promise<void>(resolve => { finish = resolve; })) },
+        notificationService: { show: vi.fn() },
+      });
+      const saving = board.onSwimlaneDrop({ item: { data: task }, previousContainer: {}, container: {}, currentIndex: 0 }, '未着手', destination);
+      expect(board.swimlaneUpdates().get('a').changes[field]).toBe(destination);
+      expect(board.cdr.detectChanges).toHaveBeenCalledTimes(1);
+      finish();
+      await saving;
+      expect(board.swimlaneUpdates().has('a')).toBe(true);
+      tasks.set([{ ...task, [field]: destination }]);
+      board.clearAcknowledgedSwimlaneUpdates();
+      expect(board.swimlaneUpdates().size).toBe(0);
+    });
+  }
+
+  it('rolls back a failed lane change and displays the error', async () => {
+    const task = { id: 'a', status: '未着手', priority: 'low' };
+    const board = Object.assign(Object.create(BoardComponent.prototype), {
+      auth: { currentUser: () => ({ uid: 'alice' }) },
+      swimlaneMode: () => 'priority', swimlaneUpdates: signal(new Map()),
+      canMoveTask: () => true, cdr: { detectChanges: vi.fn() },
+      tasksService: { tasks: () => [task], updateTask: vi.fn().mockRejectedValue(new Error('offline')) },
+      notificationService: { show: vi.fn() },
+    });
+    await board.onSwimlaneDrop({ item: { data: task }, previousContainer: {}, container: {} }, '未着手', 'high');
+    expect(board.swimlaneUpdates().size).toBe(0);
+    expect(board.notificationService.show).toHaveBeenCalledWith('移動エラー', 'offline');
+  });
 });

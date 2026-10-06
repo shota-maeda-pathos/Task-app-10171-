@@ -75,7 +75,9 @@ async function resetWeeklyFocus(db, now = () => new Date()) {
 
       transaction.update(doc.ref, {
         focusThisWeek: true,
-        focusHours: Math.min(Math.max(0, focusHours), estimatedHours),
+        focusHours: estimatedHours > 0
+          ? Math.min(Math.max(0, focusHours), estimatedHours)
+          : Math.max(0, focusHours),
       });
       return true;
     });

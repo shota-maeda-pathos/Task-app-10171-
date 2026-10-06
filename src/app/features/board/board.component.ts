@@ -13,7 +13,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { CdkDrag, CdkDragDrop, CdkDropList, DragDropModule, moveItemInArray } from '@angular/cdk/drag-drop';
+import { CdkDrag, CdkDragDrop, CdkDropList, DragDropModule, moveItemInArray, transferArrayItem } from '@angular/cdk/drag-drop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TasksService, RecurrenceGenerationError } from '../../core/services/tasks.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -50,6 +50,15 @@ export class BoardComponent {
   tasksService = inject(TasksService);
   auth = inject(AuthService);
   personalTaskOrder = inject(PersonalTaskOrderService);
+  private swimlaneUpdates = signal(new Map<string, { uid: string; changes: Partial<Task>; committed: boolean }>());
+  private displayedTasks = computed(() => {
+    const uid = this.auth.currentUser()?.uid;
+    const updates = this.swimlaneUpdates();
+    return this.tasksService.tasks().map(task => {
+      const update = updates.get(task.id);
+      return update && update.uid === uid ? { ...task, ...update.changes } : task;
+    });
+  });
   notificationService = inject(NotificationService);
   Math = Math;
   formatHours = formatWorkHours;
@@ -443,9 +452,10 @@ export class BoardComponent {
       const on = this.bulkFocus === 'on';
       for (const id of ids) {
         const task = this.tasksService.tasks().find((t) => t.id === id);
+        if (!task) continue;
         await this.tasksService.updateTask(id, {
           focusThisWeek: on,
-          focusHours: on ? (task?.focusHours ?? task?.estimatedHours ?? 0) : null,
+          focusHours: on ? (task.focusHours ?? task.estimatedHours ?? 0) : null,
         });
       }
       changed++;
@@ -590,6 +600,7 @@ export class BoardComponent {
   private lastAssigneeQueryParam: string | null | undefined;
 
   constructor() {
+    effect(() => this.clearAcknowledgedSwimlaneUpdates());
 
 
     effect(() => {
@@ -738,7 +749,7 @@ export class BoardComponent {
   }
 
   rootTasksByColumn = computed(() => {
-    let all = this.tasksService.tasks().filter((t) => t.parentId === null);
+    let all = this.displayedTasks().filter((t) => t.parentId === null);
 
     // 検索フィルター
     const query = this.searchQuery().trim().toLowerCase();
@@ -749,7 +760,7 @@ export class BoardComponent {
     // 担当者フィルター
     if (this.filterAssignee()) {
       const assignee = this.filterAssignee();
-      const allTasks = this.tasksService.tasks();
+      const allTasks = this.displayedTasks();
       if (assignee === 'unassigned') {
         all = all.filter((t) => !t.assigneeId);
       } else {
@@ -1036,10 +1047,18 @@ export class BoardComponent {
       );
       return;
     }
+    // UIを即座に更新して「戻る」挙動を防止
+    transferArrayItem(
+      event.previousContainer.data,
+      event.container.data,
+      event.previousIndex,
+      event.currentIndex,
+    );
+    this.cdr.detectChanges();
+
     if (targetStatus === '完了') {
       this.startComplete(task);
     } else {
-      // 完了から戻す場合は実績時間をリセット
       if (task.status === '完了') {
         await this.tasksService.updateTask(task.id, { actualHours: null });
       }
@@ -1047,10 +1066,15 @@ export class BoardComponent {
     }
   }
 
-  async onSwimlaneDrop(event: CdkDragDrop<Task[]>, targetStatus: TaskStatus): Promise<void> {
+  async onSwimlaneDrop(event: CdkDragDrop<Task[]>, targetStatus: TaskStatus, laneKey?: string): Promise<void> {
     const task = event.item.data as Task;
     if (!task) return;
-    if (event.previousContainer === event.container) {
+
+    const mode = this.swimlaneMode();
+    const laneChanged = laneKey != null && mode !== 'none' && this.getTaskLaneKey(task, mode) !== laneKey;
+    const statusChanged = task.status !== targetStatus;
+
+    if (!laneChanged && event.previousContainer === event.container) {
       await this.reorderVisibleRoots(task, event.container.data, event.currentIndex, targetStatus);
       return;
     }
@@ -1058,7 +1082,7 @@ export class BoardComponent {
       this.notificationService.show('権限エラー', '他人のタスクは移動できません');
       return;
     }
-    if (task.status === targetStatus) return;
+    if (!statusChanged && !laneChanged) return;
     if (targetStatus === '完了' && this.tasksService.isBlocked(task)) {
       this.notificationService.show(
         'ブロック中',
@@ -1066,14 +1090,70 @@ export class BoardComponent {
       );
       return;
     }
-    if (targetStatus === '完了') {
-      this.startComplete(task);
-    } else {
-      if (task.status === '完了') {
-        await this.tasksService.updateTask(task.id, { actualHours: null });
+
+    const laneUpdate: Record<string, any> = {};
+    if (laneChanged) {
+      if (mode === 'assignee') {
+        laneUpdate['assigneeId'] = laneKey === '__none__' ? null : laneKey;
+      } else if (mode === 'priority') {
+        laneUpdate['priority'] = laneKey === '__none__' ? null : laneKey;
       }
-      await this.tasksService.updateStatus(task.id, targetStatus);
     }
+
+    const entry = {
+      uid: this.auth.currentUser()!.uid,
+      changes: { ...laneUpdate, ...(statusChanged && targetStatus !== '完了' ? { status: targetStatus } : {}) } as Partial<Task>,
+      committed: false,
+    };
+    this.swimlaneUpdates.update(updates => new Map(updates).set(task.id, entry));
+    this.cdr.detectChanges();
+    try {
+      if (targetStatus === '完了') {
+        if (Object.keys(laneUpdate).length > 0) {
+          await this.tasksService.updateTask(task.id, laneUpdate);
+        }
+        this.startComplete(task);
+      } else {
+        if (task.status === '完了') {
+          laneUpdate['actualHours'] = null;
+        }
+        if (statusChanged) {
+          if (Object.keys(laneUpdate).length > 0) {
+            await this.tasksService.updateTask(task.id, laneUpdate);
+          }
+          await this.tasksService.updateStatus(task.id, targetStatus);
+        } else {
+          await this.tasksService.updateTask(task.id, laneUpdate);
+        }
+      }
+      if (this.swimlaneUpdates().get(task.id) === entry) {
+        entry.committed = true;
+        this.swimlaneUpdates.update(updates => new Map(updates));
+        this.clearAcknowledgedSwimlaneUpdates();
+      }
+    } catch (error) {
+      if (this.swimlaneUpdates().get(task.id) === entry) {
+        this.swimlaneUpdates.update(updates => { const next = new Map(updates); next.delete(task.id); return next; });
+      }
+      this.notificationService.show('移動エラー', error instanceof Error ? error.message : '変更を保存できませんでした');
+    }
+  }
+
+  private clearAcknowledgedSwimlaneUpdates(): void {
+    const uid = this.auth.currentUser()?.uid;
+    const tasks = this.tasksService.tasks();
+    const updates = this.swimlaneUpdates();
+    const next = new Map(updates);
+    for (const [id, entry] of updates) {
+      const task = tasks.find(task => task.id === id);
+      if (entry.uid !== uid || !task || (entry.committed && Object.entries(entry.changes).every(([field, value]) => task[field as keyof Task] === value))) next.delete(id);
+    }
+    if (next.size !== updates.size) this.swimlaneUpdates.set(next);
+  }
+
+  private getTaskLaneKey(task: Task, mode: 'assignee' | 'priority'): string {
+    if (mode === 'assignee') return task.assigneeId ?? '__none__';
+    return task.priority ?? '__none__';
   }
 
   // --- ルートタスク追加 ---
