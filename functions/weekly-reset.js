@@ -27,23 +27,23 @@ async function resetWeeklyFocus(db, now = () => new Date()) {
   let resetCount = 0;
   for (const doc of focusedSnapshot.docs) {
     const changed = await db.runTransaction(async transaction => {
-    const latest = await transaction.get(doc.ref);
-    if (!latest.exists) return false;
-    const data = latest.data();
-    if (!data.focusThisWeek || !ACTIVE_STATUSES.includes(data.status)) return false;
-    const targetWeek = data.targetWeekStart?.toDate
-      ? data.targetWeekStart.toDate()
-      : data.targetWeekStart;
-    const taskMonday = targetWeek ? getWeekMondayJST(targetWeek) : null;
+      const latest = await transaction.get(doc.ref);
+      if (!latest.exists) return false;
+      const data = latest.data();
+      if (!data.focusThisWeek || !ACTIVE_STATUSES.includes(data.status)) return false;
+      const targetWeek = data.targetWeekStart?.toDate
+        ? data.targetWeekStart.toDate()
+        : data.targetWeekStart;
+      const taskMonday = targetWeek ? getWeekMondayJST(targetWeek) : null;
 
-    // targetWeekStartが今週の月曜なら今週設定分なのでスキップ
-    if (taskMonday && taskMonday.getTime() >= currentMonday.getTime()) return false;
+      // 今週・将来の予定は保持し、過去のフォーカスだけを解除する。
+      if (taskMonday && taskMonday.getTime() >= currentMonday.getTime()) return false;
 
-    transaction.update(doc.ref, {
-      focusThisWeek: false,
-      focusHours: null,
-    });
-    return true;
+      transaction.update(doc.ref, {
+        focusThisWeek: false,
+        focusHours: null,
+      });
+      return true;
     });
     if (changed) resetCount++;
   }
@@ -58,26 +58,26 @@ async function resetWeeklyFocus(db, now = () => new Date()) {
   let activatedCount = 0;
   for (const doc of scheduledSnapshot.docs) {
     const changed = await db.runTransaction(async transaction => {
-    const latest = await transaction.get(doc.ref);
-    if (!latest.exists) return false;
-    const data = latest.data();
-    if (data.focusThisWeek || !ACTIVE_STATUSES.includes(data.status) || !data.targetWeekStart) return false;
+      const latest = await transaction.get(doc.ref);
+      if (!latest.exists) return false;
+      const data = latest.data();
+      if (data.focusThisWeek || !ACTIVE_STATUSES.includes(data.status) || !data.targetWeekStart) return false;
 
-    const targetWeek = data.targetWeekStart.toDate
-      ? data.targetWeekStart.toDate()
-      : data.targetWeekStart;
-    const taskMonday = getWeekMondayJST(targetWeek);
+      const targetWeek = data.targetWeekStart.toDate
+        ? data.targetWeekStart.toDate()
+        : data.targetWeekStart;
+      const taskMonday = getWeekMondayJST(targetWeek);
 
-    if (taskMonday.getTime() !== currentMonday.getTime()) return false;
+      if (taskMonday.getTime() !== currentMonday.getTime()) return false;
 
-    const estimatedHours = data.estimatedHours ?? 0;
-    const focusHours = data.focusHours ?? estimatedHours;
+      const estimatedHours = data.estimatedHours ?? 0;
+      const focusHours = data.focusHours ?? estimatedHours;
 
-    transaction.update(doc.ref, {
-      focusThisWeek: true,
-      focusHours: Math.min(Math.max(0, focusHours), estimatedHours),
-    });
-    return true;
+      transaction.update(doc.ref, {
+        focusThisWeek: true,
+        focusHours: Math.min(Math.max(0, focusHours), estimatedHours),
+      });
+      return true;
     });
     if (changed) activatedCount++;
   }

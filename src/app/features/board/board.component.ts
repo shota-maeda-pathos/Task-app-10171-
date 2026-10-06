@@ -13,10 +13,11 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { CdkDrag, CdkDragDrop, DragDropModule, moveItemInArray } from '@angular/cdk/drag-drop';
+import { CdkDrag, CdkDragDrop, CdkDropList, DragDropModule, moveItemInArray } from '@angular/cdk/drag-drop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TasksService, RecurrenceGenerationError } from '../../core/services/tasks.service';
 import { AuthService } from '../../core/services/auth.service';
+import { PersonalTaskOrderService } from '../../core/services/personal-task-order.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { CommentPanelComponent } from './comment-panel/comment-panel';
 import { Task, TaskStatus, Member, Priority, RecurrenceType, TaskTemplate } from '../../core/models/task.model';
@@ -48,6 +49,7 @@ interface PendingAdd {
 export class BoardComponent {
   tasksService = inject(TasksService);
   auth = inject(AuthService);
+  personalTaskOrder = inject(PersonalTaskOrderService);
   notificationService = inject(NotificationService);
   Math = Math;
   formatHours = formatWorkHours;
@@ -58,7 +60,8 @@ export class BoardComponent {
 
   columns: TaskStatus[] = ['未着手', '進行中', '完了'];
   connectedLists = this.columns.map((s) => 'col-' + s);
-  canDropRootTask = (drag: CdkDrag<Task>): boolean => !drag.data.parentId;
+  canDropRootTask = (drag: CdkDrag<Task>, drop: CdkDropList<Task[]>): boolean =>
+    !drag.data.parentId && (drag.dropContainer === drop || this.canMoveTask(drag.data));
   canDropSubtask = (drag: CdkDrag<Task>): boolean => !!drag.data.parentId;
 
   openEpicId: string | null = null;
@@ -401,7 +404,7 @@ export class BoardComponent {
           try {
             await this.tasksService.completeTask(id, task.estimatedHours ?? 0);
           } catch (error) {
-            if (error instanceof RecurrenceGenerationError) this.notificationService.showRetry(error.retry);
+            if (error instanceof RecurrenceGenerationError) this.notificationService.showRecurrenceFailure();
             else this.notificationService.show('完了エラー', error instanceof Error ? error.message : 'タスクの完了に失敗しました');
             return;
           }
@@ -498,8 +501,6 @@ export class BoardComponent {
   selectedTask = signal<Task | null>(null);
   expandedCompactTaskId = signal<string | null>(null);
   expandedSubtaskIds = signal<Set<string>>(new Set());
-  private optimisticTaskOrders = signal<Record<string, string[]>>({});
-  private taskOrderVersions = new Map<string, number>();
   sidebarCollapsed = signal(false);
   sidebarWidth = signal(260);
   commentPanelWidth = signal(320);
@@ -589,35 +590,7 @@ export class BoardComponent {
   private lastAssigneeQueryParam: string | null | undefined;
 
   constructor() {
-    effect(() => {
-      const tasks = this.tasksService.tasks();
-      const optimisticOrders = this.optimisticTaskOrders();
-      const syncedKeys = Object.entries(optimisticOrders)
-        .filter(([key, orderedIds]) => {
-          const orderedIdSet = new Set(orderedIds);
-          const currentIds = tasks
-            .filter((task) =>
-              key === 'root'
-                ? task.parentId === null && orderedIdSet.has(task.id)
-                : task.parentId === key && orderedIdSet.has(task.id),
-            )
-            .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
-            .map((task) => task.id);
-          return (
-            currentIds.length === orderedIds.length &&
-            currentIds.every((id, index) => id === orderedIds[index])
-          );
-        })
-        .map(([key]) => key);
 
-      if (syncedKeys.length > 0) {
-        this.optimisticTaskOrders.update((orders) => {
-          const next = { ...orders };
-          syncedKeys.forEach((key) => delete next[key]);
-          return next;
-        });
-      }
-    });
 
     effect(() => {
       const uid = this.auth.currentUser()?.uid;
@@ -828,90 +801,35 @@ export class BoardComponent {
       } else {
         grouped[status] = all.filter((t) => t.status === status);
       }
-      const optimisticOrder = this.optimisticTaskOrders()['root'];
-      if (optimisticOrder) {
-        const orderById = new Map(optimisticOrder.map((id, index) => [id, index]));
-        grouped[status] = [...grouped[status]].sort((a, b) => {
-          const aIndex = orderById.get(a.id);
-          const bIndex = orderById.get(b.id);
-          if (aIndex !== undefined && bIndex !== undefined) return aIndex - bIndex;
-          if (aIndex !== undefined) return -1;
-          if (bIndex !== undefined) return 1;
-          return a.order - b.order || a.id.localeCompare(b.id);
-        });
-      }
+      if (sort === 'none') grouped[status] = this.personalTaskOrder.sort(grouped[status], 'root:' + status);
     }
     return grouped;
   });
 
   getChildren(epicId: string): Task[] {
-    const children = this.tasksService
-      .tasks()
-      .filter((t) => t.parentId === epicId)
+    const children = this.tasksService.tasks().filter(task => task.parentId === epicId)
       .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
-    const optimisticOrder = this.optimisticTaskOrders()[epicId];
-    if (!optimisticOrder) return children;
-
-    const orderById = new Map(optimisticOrder.map((id, index) => [id, index]));
-    return [...children].sort((a, b) => {
-      const aIndex = orderById.get(a.id);
-      const bIndex = orderById.get(b.id);
-      if (aIndex !== undefined && bIndex !== undefined) return aIndex - bIndex;
-      if (aIndex !== undefined) return -1;
-      if (bIndex !== undefined) return 1;
-      return a.order - b.order || a.id.localeCompare(b.id);
-    });
+    return this.personalTaskOrder.sort(children, 'children:' + epicId);
   }
 
-  private clearOptimisticTaskOrder(key: string): void {
-    this.optimisticTaskOrders.update((orders) => {
-      if (!(key in orders)) return orders;
-      const next = { ...orders };
-      delete next[key];
-      return next;
-    });
-  }
-
-  canReorderSubtask(task: Task): boolean {
-    const parent = task.parentId
-      ? this.tasksService.tasks().find((candidate) => candidate.id === task.parentId)
-      : null;
-    return this.canMoveTask(task) || (!!parent && this.canMoveTask(parent));
+  canReorderSubtask(_task: Task): boolean {
+    return this.personalTaskOrder.canReorder();
   }
 
   async reorderSubtasks(event: CdkDragDrop<Task[]>, parentId: string): Promise<void> {
     if (event.previousContainer !== event.container) return;
     const task = event.item.data;
-    if (!task || task.parentId !== parentId) return;
-    if (!this.canReorderSubtask(task)) {
-      this.notificationService.show('権限エラー', '他人のタスクは移動できません');
-      return;
-    }
-
-    const children = [...this.getChildren(parentId)];
-    if (
-      event.previousIndex < 0 ||
-      event.currentIndex < 0 ||
-      event.previousIndex >= children.length ||
-      event.currentIndex >= children.length ||
-      event.previousIndex === event.currentIndex
-    ) {
-      return;
-    }
-    moveItemInArray(children, event.previousIndex, event.currentIndex);
-    const orderedIds = children.map((child) => child.id);
-    const version = (this.taskOrderVersions.get(parentId) ?? 0) + 1;
-    this.taskOrderVersions.set(parentId, version);
-    this.optimisticTaskOrders.update((orders) => ({ ...orders, [parentId]: orderedIds }));
-    this.cdr.detectChanges();
+    if (!task || task.parentId !== parentId || !this.canReorderSubtask(task)) return;
+    const children = this.getChildren(parentId);
+    const sourceIndex = children.findIndex(child => child.id === task.id);
+    if (sourceIndex < 0 || event.currentIndex < 0 || event.currentIndex >= children.length || sourceIndex === event.currentIndex) return;
+    moveItemInArray(children, sourceIndex, event.currentIndex);
     try {
-      await this.tasksService.reorderSubtasks(parentId, orderedIds);
+      const saving = this.personalTaskOrder.reorder('children:' + parentId, children.map(child => child.id));
+      this.cdr.detectChanges();
+      await saving;
     } catch (error) {
-      if (this.taskOrderVersions.get(parentId) === version) {
-        this.clearOptimisticTaskOrder(parentId);
-      }
-      console.error('サブタスクの並び替えエラー:', error);
-      this.notificationService.show('並び替えエラー', 'サブタスクの順序を保存できませんでした');
+      this.notificationService.show('並び替えエラー', error instanceof Error ? error.message : '個人の並び順を保存できませんでした');
     }
   }
 
@@ -1079,45 +997,37 @@ export class BoardComponent {
 
   // --- ドラッグ&ドロップ ---
 
+  private async reorderVisibleRoots(task: Task, visible: Task[], currentIndex: number, status: TaskStatus): Promise<void> {
+    if (!this.personalTaskOrder.canReorder()) return;
+    const list = [...visible];
+    const sourceIndex = list.findIndex(item => item.id === task.id);
+    if (sourceIndex < 0 || currentIndex < 0 || currentIndex >= list.length || sourceIndex === currentIndex) return;
+    moveItemInArray(list, sourceIndex, currentIndex);
+    const previousSort = this.sortBy();
+    this.setSortBy('none');
+    try {
+      const saving = this.personalTaskOrder.reorder('root:' + status, list.map(item => item.id));
+      // CDK has restored the original DOM before emitting dropped. Render the
+      // updated order in this handler, before the browser can paint that DOM.
+      this.cdr.detectChanges();
+      await saving;
+    } catch (error) {
+      this.setSortBy(previousSort);
+      this.notificationService.show('並び替えエラー', error instanceof Error ? error.message : '個人の並び順を保存できませんでした');
+    }
+  }
+
   async onDrop(event: CdkDragDrop<Task[]>, targetStatus: TaskStatus): Promise<void> {
     const task = event.item.data as Task;
     if (!task) return;
-
+    if (event.previousContainer === event.container) {
+      await this.reorderVisibleRoots(task, this.rootTasksByColumn()[targetStatus] ?? [], event.currentIndex, targetStatus);
+      return;
+    }
     if (!this.canMoveTask(task)) {
       this.notificationService.show('権限エラー', '他人のタスクは移動できません');
       return;
     }
-
-    // 同じカラム内での並び替え
-    if (event.previousContainer === event.container) {
-      const list = [...(this.rootTasksByColumn()[targetStatus] ?? [])];
-      const sourceIndex = list.findIndex((item) => item.id === task.id);
-      if (
-        sourceIndex < 0 ||
-        event.currentIndex < 0 ||
-        event.currentIndex >= list.length ||
-        sourceIndex === event.currentIndex
-      ) {
-        return;
-      }
-      moveItemInArray(list, sourceIndex, event.currentIndex);
-      const orderedIds = list.map((item) => item.id);
-      const version = (this.taskOrderVersions.get('root') ?? 0) + 1;
-      this.taskOrderVersions.set('root', version);
-      this.optimisticTaskOrders.update((orders) => ({ ...orders, root: orderedIds }));
-      this.cdr.detectChanges();
-      try {
-        await this.tasksService.reorderRootTasks(orderedIds);
-      } catch (error) {
-        if (this.taskOrderVersions.get('root') === version) {
-          this.clearOptimisticTaskOrder('root');
-        }
-        console.error('タスクの並び替えエラー:', error);
-        this.notificationService.show('並び替えエラー', 'タスクの順序を保存できませんでした');
-      }
-      return;
-    }
-
     if (task.status === targetStatus) return;
     if (targetStatus === '完了' && this.tasksService.isBlocked(task)) {
       this.notificationService.show(
@@ -1140,52 +1050,14 @@ export class BoardComponent {
   async onSwimlaneDrop(event: CdkDragDrop<Task[]>, targetStatus: TaskStatus): Promise<void> {
     const task = event.item.data as Task;
     if (!task) return;
-
+    if (event.previousContainer === event.container) {
+      await this.reorderVisibleRoots(task, event.container.data, event.currentIndex, targetStatus);
+      return;
+    }
     if (!this.canMoveTask(task)) {
       this.notificationService.show('権限エラー', '他人のタスクは移動できません');
       return;
     }
-
-    if (event.previousContainer === event.container) {
-      const filteredList = [...(event.container.data as Task[])];
-      const sourceIdx = filteredList.findIndex((item) => item.id === task.id);
-      if (
-        sourceIdx < 0 ||
-        event.currentIndex < 0 ||
-        event.currentIndex >= filteredList.length ||
-        sourceIdx === event.currentIndex
-      ) {
-        return;
-      }
-      moveItemInArray(filteredList, sourceIdx, event.currentIndex);
-      const fullList = [...(this.rootTasksByColumn()[targetStatus] ?? [])];
-      const laneIds = new Set(filteredList.map((t) => t.id));
-      const result: Task[] = [];
-      let fi = 0;
-      for (const t of fullList) {
-        if (laneIds.has(t.id)) {
-          result.push(filteredList[fi++]);
-        } else {
-          result.push(t);
-        }
-      }
-      const orderedIds = result.map((item) => item.id);
-      const version = (this.taskOrderVersions.get('root') ?? 0) + 1;
-      this.taskOrderVersions.set('root', version);
-      this.optimisticTaskOrders.update((orders) => ({ ...orders, root: orderedIds }));
-      this.cdr.detectChanges();
-      try {
-        await this.tasksService.reorderRootTasks(orderedIds);
-      } catch (error) {
-        if (this.taskOrderVersions.get('root') === version) {
-          this.clearOptimisticTaskOrder('root');
-        }
-        console.error('タスクの並び替えエラー:', error);
-        this.notificationService.show('並び替えエラー', 'タスクの順序を保存できませんでした');
-      }
-      return;
-    }
-
     if (task.status === targetStatus) return;
     if (targetStatus === '完了' && this.tasksService.isBlocked(task)) {
       this.notificationService.show(
@@ -1505,7 +1377,7 @@ export class BoardComponent {
         await this.tasksService.completeTask(task.id, 0);
         this.notificationService.show('完了', `「${task.title}」を完了にしました`);
       } catch (error) {
-        if (error instanceof RecurrenceGenerationError) this.notificationService.showRetry(error.retry);
+        if (error instanceof RecurrenceGenerationError) this.notificationService.showRecurrenceFailure();
         else this.notificationService.show('完了エラー', error instanceof Error ? error.message : 'タスクの完了に失敗しました');
       }
       return;
@@ -1529,7 +1401,7 @@ export class BoardComponent {
     } catch (error) {
       if (error instanceof RecurrenceGenerationError) {
         this.completingTask = null;
-        this.notificationService.showRetry(error.retry);
+        this.notificationService.showRecurrenceFailure();
       } else this.notificationService.show('完了エラー', error instanceof Error ? error.message : 'タスクの完了に失敗しました');
     }
   }

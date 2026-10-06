@@ -64,6 +64,23 @@ service cloud.firestore {
       // Keep disabled records so the same account cannot register again.
       allow delete: if false;
 
+      // Personal display order: only the active owner can read or write it.
+      // { taskIds: unique list (max 3000), updatedAt: server timestamp }
+      match /taskOrders/{scope} {
+        function isValidTaskOrder(data) {
+          return data.keys().hasAll(['taskIds', 'updatedAt'])
+            && data.keys().hasOnly(['taskIds', 'updatedAt'])
+            && data.taskIds is list && data.taskIds.size() <= 3000
+            && data.taskIds.toSet().size() == data.taskIds.size()
+            && data.updatedAt is timestamp && data.updatedAt == request.time
+            && (scope in ['root:未着手', 'root:進行中', 'root:完了']
+              || scope.matches('children:[A-Za-z0-9_-]{1,128}'));
+        }
+        allow read, delete: if isActiveMember() && request.auth.uid == memberId;
+        allow create, update: if isActiveMember() && request.auth.uid == memberId
+          && isValidTaskOrder(request.resource.data);
+      }
+
       match /notifications/{notifId} {
         allow read: if isActiveMember()
                     && (request.auth.uid == memberId || isManager());

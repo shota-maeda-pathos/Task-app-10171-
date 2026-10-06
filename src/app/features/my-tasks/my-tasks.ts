@@ -15,6 +15,7 @@ import { CommonModule } from '@angular/common';
 import { CdkDragDrop, DragDropModule, moveItemInArray } from '@angular/cdk/drag-drop';
 import { Router } from '@angular/router';
 import { TasksService, RecurrenceGenerationError } from '../../core/services/tasks.service';
+import { PersonalTaskOrderService } from '../../core/services/personal-task-order.service';
 import { AuthService } from '../../core/services/auth.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { Timestamp } from '@angular/fire/firestore';
@@ -34,6 +35,7 @@ type SortKey = 'default' | 'priority' | 'dueDate' | 'status';
 export class MyTasksComponent {
   tasksService = inject(TasksService);
   auth = inject(AuthService);
+  personalTaskOrder = inject(PersonalTaskOrderService);
   private notificationService = inject(NotificationService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
@@ -104,42 +106,12 @@ export class MyTasksComponent {
 
   expandedTaskId = signal<string | null>(null);
   expandedSubtaskIds = signal<Set<string>>(new Set());
-  private optimisticSubtaskOrders = signal<Record<string, string[]>>({});
-  private subtaskOrderVersions = new Map<string, number>();
 
   showSortMenu = false;
   completingTask: Task | null = null;
   actualHoursInput = 0;
   reviewingTask: Task | null = null;
   reviewReasonInput = '';
-
-  constructor() {
-    effect(() => {
-      const tasks = this.tasksService.tasks();
-      const optimisticOrders = this.optimisticSubtaskOrders();
-      const syncedParents = Object.entries(optimisticOrders)
-        .filter(([parentId, orderedIds]) => {
-          const orderedIdSet = new Set(orderedIds);
-          const currentIds = tasks
-            .filter((task) => task.parentId === parentId && orderedIdSet.has(task.id))
-            .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
-            .map((task) => task.id);
-          return (
-            currentIds.length === orderedIds.length &&
-            currentIds.every((id, index) => id === orderedIds[index])
-          );
-        })
-        .map(([parentId]) => parentId);
-
-      if (syncedParents.length > 0) {
-        this.optimisticSubtaskOrders.update((orders) => {
-          const next = { ...orders };
-          syncedParents.forEach((parentId) => delete next[parentId]);
-          return next;
-        });
-      }
-    });
-  }
 
   myTasks = computed(() => {
     const uid = this.auth.currentUser()?.uid;
@@ -417,68 +389,29 @@ export class MyTasksComponent {
 
   // --- サブタスク ---
   getChildren(epicId: string): Task[] {
-    const children = this.tasksService
-      .tasks()
-      .filter((t) => t.parentId === epicId)
+    const children = this.tasksService.tasks().filter(task => task.parentId === epicId)
       .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
-    const optimisticOrder = this.optimisticSubtaskOrders()[epicId];
-    if (!optimisticOrder) return children;
-
-    const orderById = new Map(optimisticOrder.map((id, index) => [id, index]));
-    return [...children].sort((a, b) => {
-      const aIndex = orderById.get(a.id);
-      const bIndex = orderById.get(b.id);
-      if (aIndex !== undefined && bIndex !== undefined) return aIndex - bIndex;
-      if (aIndex !== undefined) return -1;
-      if (bIndex !== undefined) return 1;
-      return a.order - b.order || a.id.localeCompare(b.id);
-    });
+    return this.personalTaskOrder.sort(children, 'children:' + epicId);
   }
 
-  canReorderSubtask(task: Task): boolean {
-    const parent = task.parentId
-      ? this.tasksService.tasks().find((candidate) => candidate.id === task.parentId)
-      : null;
-    return this.canMoveTask(task) || (!!parent && this.canMoveTask(parent));
+  canReorderSubtask(_task: Task): boolean {
+    return this.personalTaskOrder.canReorder();
   }
 
   async reorderSubtasks(event: CdkDragDrop<Task[]>, parentId: string): Promise<void> {
     if (event.previousContainer !== event.container) return;
     const task = event.item.data;
-    if (!task || task.parentId !== parentId) return;
-    if (!this.canReorderSubtask(task)) {
-      this.notificationService.show('権限エラー', '他人のタスクは移動できません');
-      return;
-    }
-
-    const children = [...this.getChildren(parentId)];
-    if (
-      event.previousIndex < 0 ||
-      event.currentIndex < 0 ||
-      event.previousIndex >= children.length ||
-      event.currentIndex >= children.length ||
-      event.previousIndex === event.currentIndex
-    ) {
-      return;
-    }
-    moveItemInArray(children, event.previousIndex, event.currentIndex);
-    const orderedIds = children.map((child) => child.id);
-    const version = (this.subtaskOrderVersions.get(parentId) ?? 0) + 1;
-    this.subtaskOrderVersions.set(parentId, version);
-    this.optimisticSubtaskOrders.update((orders) => ({ ...orders, [parentId]: orderedIds }));
-    this.cdr.detectChanges();
+    if (!task || task.parentId !== parentId || !this.canReorderSubtask(task)) return;
+    const children = this.getChildren(parentId);
+    const sourceIndex = children.findIndex(child => child.id === task.id);
+    if (sourceIndex < 0 || event.currentIndex < 0 || event.currentIndex >= children.length || sourceIndex === event.currentIndex) return;
+    moveItemInArray(children, sourceIndex, event.currentIndex);
     try {
-      await this.tasksService.reorderSubtasks(parentId, orderedIds);
+      const saving = this.personalTaskOrder.reorder('children:' + parentId, children.map(child => child.id));
+      this.cdr.detectChanges();
+      await saving;
     } catch (error) {
-      if (this.subtaskOrderVersions.get(parentId) === version) {
-        this.optimisticSubtaskOrders.update((orders) => {
-          const next = { ...orders };
-          delete next[parentId];
-          return next;
-        });
-      }
-      console.error('サブタスクの並び替えエラー:', error);
-      this.notificationService.show('並び替えエラー', 'サブタスクの順序を保存できませんでした');
+      this.notificationService.show('並び替えエラー', error instanceof Error ? error.message : '個人の並び順を保存できませんでした');
     }
   }
 
@@ -594,7 +527,7 @@ export class MyTasksComponent {
         this.notificationService.show('完了', `「${task.title}」を完了にしました`);
         if (!task.parentId) this.expandedTaskId.set(null);
       } catch (error) {
-        if (error instanceof RecurrenceGenerationError) this.notificationService.showRetry(error.retry);
+        if (error instanceof RecurrenceGenerationError) this.notificationService.showRecurrenceFailure();
         else this.notificationService.show('完了エラー', error instanceof Error ? error.message : 'タスクの完了に失敗しました');
       }
       return;
@@ -620,7 +553,7 @@ export class MyTasksComponent {
     } catch (error) {
       if (error instanceof RecurrenceGenerationError) {
         this.completingTask = null;
-        this.notificationService.showRetry(error.retry);
+        this.notificationService.showRecurrenceFailure();
       } else this.notificationService.show('完了エラー', error instanceof Error ? error.message : 'タスクの完了に失敗しました');
     }
   }

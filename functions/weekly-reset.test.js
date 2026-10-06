@@ -49,13 +49,21 @@ function makeDb(tasks) {
         db.beforeTransaction = null;
         hook(records);
       }
-      const result = await callback({
+      const transaction = {
         async get(ref) {
           const value = records.get(ref.path);
           return { exists: !!value, data: () => ({ ...value }) };
         },
         update(ref, data) { ops.push({ ref, data }); },
-      });
+      };
+      let result = await callback(transaction);
+      if (db.onConflict) {
+        const hook = db.onConflict;
+        db.onConflict = null;
+        hook(records);
+        ops.length = 0;
+        result = await callback(transaction);
+      }
       for (const { ref, data } of ops) Object.assign(records.get(ref.path), data);
       return result;
     },
@@ -169,7 +177,7 @@ describe('resetWeeklyFocus', () => {
     assert.equal(db.records.get('tasks/a').focusThisWeek, true);
   });
 
-  it('450件を超えてもバッチが正しく分割される', async () => {
+  it('500件を個別トランザクションで処理できる', async () => {
     const tasks = [];
     for (let i = 0; i < 500; i++) {
       tasks.push({
@@ -187,6 +195,42 @@ describe('resetWeeklyFocus', () => {
     assert.equal(result.reset, 500);
     for (let i = 0; i < 500; i++) {
       assert.equal(db.records.get(`tasks/task-${i}`).focusThisWeek, false);
+    }
+  });
+  it('自動ONの読み取り後に2hへ変更された場合は最新値を使う', async () => {
+    const db = makeDb([{ id: 'a', focusThisWeek: false, estimatedHours: 8,
+      focusHours: null, status: '未着手', targetWeekStart: ts(thisMondayJST) }]);
+    db.beforeTransaction = records => Object.assign(records.get('tasks/a'), { focusHours: 2 });
+    await resetWeeklyFocus(db, () => fireTime);
+    assert.equal(db.records.get('tasks/a').focusHours, 2);
+  });
+  it('トランザクション競合後も利用者の今週2hを上書きしない', async () => {
+    const db = makeDb([{ id: 'a', focusThisWeek: false, estimatedHours: 8,
+      focusHours: null, status: '未着手', targetWeekStart: ts(thisMondayJST) }]);
+    db.onConflict = records => Object.assign(records.get('tasks/a'), { focusThisWeek: true, focusHours: 2 });
+    const result = await resetWeeklyFocus(db, () => fireTime);
+    assert.equal(result.activated, 0);
+    assert.equal(db.records.get('tasks/a').focusThisWeek, true);
+    assert.equal(db.records.get('tasks/a').focusHours, 2);
+  });
+  it('リセット対象が今週へ変更されたらリセットしない', async () => {
+    const db = makeDb([{ id: 'a', focusThisWeek: true, estimatedHours: 8,
+      focusHours: 8, status: '進行中', targetWeekStart: ts(lastMondayJST) }]);
+    db.onConflict = records => Object.assign(records.get('tasks/a'), { targetWeekStart: ts(thisMondayJST), focusHours: 2 });
+    const result = await resetWeeklyFocus(db, () => fireTime);
+    assert.equal(result.reset, 0);
+    assert.equal(db.records.get('tasks/a').focusHours, 2);
+  });
+  it('読み取り後に完了・削除されたタスクを自動ONしない', async () => {
+    for (const deleted of [false, true]) {
+      const db = makeDb([{ id: 'a', focusThisWeek: false, estimatedHours: 8,
+        status: '未着手', targetWeekStart: ts(thisMondayJST) }]);
+      db.beforeTransaction = records => {
+        if (deleted) records.delete('tasks/a');
+        else records.get('tasks/a').status = '完了';
+      };
+      const result = await resetWeeklyFocus(db, () => fireTime);
+      assert.equal(result.activated, 0);
     }
   });
 });

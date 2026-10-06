@@ -1969,7 +1969,7 @@
 }
 
 .cdk-drag-animating {
-    transition: transform 200ms;
+    transition: none !important;
 }
 
 .drop-zone .cdk-drag-animating,
@@ -2543,10 +2543,6 @@ input[type="date"] {
 }
 
 @container board-column (max-width: 380px) {
-    .card-creator {
-        display: none;
-    }
-
     .card-actions .comment-btn span,
     .card-actions .edit-btn span {
         display: none;
@@ -2564,10 +2560,6 @@ input[type="date"] {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-    }
-
-    .card-creator {
-        display: none;
     }
 
     .card-actions {
@@ -3119,7 +3111,6 @@ input[type="date"] {
         gap: 6px;
     }
 
-    .board.compact .card.compact-expanded .card-creator,
     .board.compact .card.compact-expanded .comment-btn span {
         display: none;
     }

@@ -847,7 +847,7 @@
                       cdkDrag
                       [cdkDragStartDelay]="dragStartDelay()"
                       [cdkDragData]="task"
-                      [cdkDragDisabled]="!canMoveTask(task)"
+                      [cdkDragDisabled]="!personalTaskOrder.canReorder()"
                       (click)="toggleCompactTaskDetails(task, $event)"
                     >
                       @if (bulkMode()) {
@@ -1499,7 +1499,7 @@
                     cdkDrag
                     [cdkDragStartDelay]="dragStartDelay()"
                     [cdkDragData]="task"
-                    [cdkDragDisabled]="!canMoveTask(task) || expandedSubtaskIds().has(task.id)"
+                    [cdkDragDisabled]="!personalTaskOrder.canReorder() || expandedSubtaskIds().has(task.id)"
                     (click)="toggleCompactTaskDetails(task, $event)"
                   >
                     @if (bulkMode()) {

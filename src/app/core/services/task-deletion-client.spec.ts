@@ -7,9 +7,47 @@ import { BoardComponent } from '../../features/board/board.component';
 import { MyTasksComponent } from '../../features/my-tasks/my-tasks';
 import { Timestamp } from 'firebase/firestore';
 import { NotificationService } from './notification.service';
+import { App } from '../../app';
 import { getWeekMonday } from '../utils/week-utils';
 
 const { invoke } = deletionMocks;
+
+describe('recurrence recovery after reloading', () => {
+  it('restores only missing authorized occurrences from persisted task data', () => {
+    const completed = { id: 'missing', status: '完了', recurrence: 'weekly', assigneeId: 'user' };
+    const tasks = [completed,
+      { ...completed, id: 'generated', recurrenceNextTaskId: 'deleted-next' },
+      { ...completed, id: 'legacy' },
+      { id: 'legacy-next', recurrencePreviousTaskId: 'legacy', status: '未着手' },
+      { ...completed, id: 'active', status: '進行中' },
+      { ...completed, id: 'other', assigneeId: 'other' },
+      { ...completed, id: 'archived', status: 'アーカイブ済み' },
+    ];
+    for (let reload = 0; reload < 2; reload++) {
+      const service = Object.assign(Object.create(TasksService.prototype), {
+        tasks: signal(tasks), auth: { currentUser: { uid: 'user' } }, members: signal([{ uid: 'user', role: 'member' }]),
+      });
+      expect(service.getMissingRecurrenceTasks().map((task: any) => task.id)).toEqual(['missing', 'archived']);
+    }
+  });
+  it('keeps the recovery entry available after failure and prevents double clicking', async () => {
+    const app = Object.assign(Object.create(App.prototype), {
+      retryingRecurrenceIds: signal(new Set<string>()), notificationService: { show: vi.fn() },
+      tasksService: { retryRecurrence: vi.fn() },
+    });
+    let reject!: (error: Error) => void;
+    app.tasksService.retryRecurrence.mockReturnValue(new Promise<void>((_resolve, fail) => reject = fail));
+    const pending = app.retryMissingRecurrence('missing');
+    await app.retryMissingRecurrence('missing');
+    expect(app.tasksService.retryRecurrence).toHaveBeenCalledTimes(1);
+    reject(new Error('offline'));
+    await pending;
+    expect(app.retryingRecurrenceIds().size).toBe(0);
+    app.tasksService.retryRecurrence.mockResolvedValue(undefined);
+    await app.retryMissingRecurrence('missing');
+    expect(app.tasksService.retryRecurrence).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe('scheduled focus at the Monday boundary', () => {
   it('activates next-week tasks only after the date reaches Monday', async () => {
@@ -440,7 +478,7 @@ for (const Component of [BoardComponent, MyTasksComponent]) {
       const component: any = Object.create(Component.prototype);
       Object.assign(component, {
         tasksService: { isBlocked: vi.fn(() => blocked), completeTask: vi.fn().mockResolvedValue(undefined) },
-        notificationService: { show: vi.fn(), showRetry: vi.fn() }, canMoveTask: () => true,
+        notificationService: { show: vi.fn(), showRecurrenceFailure: vi.fn() }, canMoveTask: () => true,
         expandedTaskId: signal('parent'), columns: ['未着手'],
       });
       return component;
@@ -479,7 +517,7 @@ for (const Component of [BoardComponent, MyTasksComponent]) {
       component.tasksService.completeTask.mockRejectedValue(new RecurrenceGenerationError(retry));
       await component.confirmComplete();
       expect(component.completingTask).toBeNull();
-      expect(component.notificationService.showRetry).toHaveBeenCalledExactlyOnceWith(retry);
+      expect(component.notificationService.showRecurrenceFailure).toHaveBeenCalledExactlyOnceWith();
       expect(component.notificationService.show).not.toHaveBeenCalled();
     });
   });
@@ -578,28 +616,32 @@ describe('recurrence generation recovery', () => {
     await expect(services[0].retryRecurrence('source')).rejects.toThrow('完了済み');
     expect(occurrences()).toHaveLength(0);
   });
+  it('fails generation once after completion is saved and allows generation-only recovery', async () => {
+    const service = services[0];
+    deletionMocks.updateDoc.mockReset().mockResolvedValue(undefined);
+    Object.assign(service, { tasks: signal([{ ...source, status: '未着手' }]),
+      completionRequests: new Map(), members: signal([{ uid: 'owner', role: 'member' }]) });
+    vi.spyOn(service, 'isRecurrenceFailureTestEnabled').mockReturnValue(true);
+    service.armRecurrenceFailureTest('source');
+    await expect(service.completeTask('source', 5)).rejects.toBeInstanceOf(RecurrenceGenerationError);
+    expect(deletionMocks.updateDoc).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ status: '完了', actualHours: 5 }));
+    expect(occurrences()).toHaveLength(0);
+    await service.retryRecurrence('source');
+    expect(occurrences()).toHaveLength(1);
+    expect(deletionMocks.updateDoc).toHaveBeenCalledTimes(1);
+  });
+  it('refuses fault injection outside the explicitly enabled local test page', () => {
+    const service = services[0];
+    vi.spyOn(service, 'isRecurrenceFailureTestEnabled').mockReturnValue(false);
+    expect(() => service.armRecurrenceFailureTest('source')).toThrow('ローカル');
+  });
 });
 
-describe('recurrence retry notification', () => {
-  it('keeps the button after a retry failure and avoids concurrent clicks', async () => {
+describe('recurrence error notification', () => {
+  it('shows only an explanation without a second retry action', () => {
     const notifications = new NotificationService();
-    let reject!: (error: Error) => void;
-    const retry = vi.fn(() => new Promise<void>((_resolve, fail) => reject = fail));
-    notifications.showRetry(retry);
-    const id = notifications.toasts()[0].id;
-    const pending = notifications.runRetry(id);
-    await notifications.runRetry(id);
-    expect(retry).toHaveBeenCalledTimes(1);
-    reject(new Error('offline')); await pending;
-    expect(notifications.toasts()[0].busy).toBe(false);
-    retry.mockResolvedValueOnce(undefined);
-    await notifications.runRetry(id);
-    expect(notifications.toasts().some(toast => toast.retry)).toBe(false);
-  });
-  it('keeps a failed generation available when another notification arrives', () => {
-    const notifications = new NotificationService();
-    notifications.showRetry(vi.fn());
-    notifications.show('Saved', 'Saved');
-    expect(notifications.toasts().filter(toast => toast.retry)).toHaveLength(1);
+    notifications.showRecurrenceFailure();
+    expect(notifications.toasts()).toHaveLength(1);
+    expect(Object.keys(notifications.toasts()[0]).sort()).toEqual(['body', 'id', 'title']);
   });
 });

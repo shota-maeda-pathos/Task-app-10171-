@@ -1,5 +1,6 @@
 export const environment = {
   production: false,
+  enableRecurrenceFailureTest: true,
   firebase: {
     apiKey: 'AIzaSyCno1gHFdQ0R10PpVfysXgGvU5-KhsYtd4',
     authDomain: 'kensyu10171.firebaseapp.com',

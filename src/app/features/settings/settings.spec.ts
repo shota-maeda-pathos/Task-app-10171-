@@ -1,6 +1,7 @@
 ﻿import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { vi, afterEach } from 'vitest';
+import { PersonalTaskOrderService } from '../../core/services/personal-task-order.service';
 import { SettingsComponent } from './settings';
 import { TasksService } from '../../core/services/tasks.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -18,6 +19,7 @@ describe('My Tasks assignee selection', () => {
     tasks.getEffectiveCapacity.mockImplementation(() => { tasks.teamSettings(); return 40; });
     tasks.getMemberWeeklyHours.mockImplementation(() => { tasks.teamSettings(); return [7, 8, 9, 10]; });
     await TestBed.configureTestingModule({ imports: [MyTasksComponent], providers: [
+      { provide: PersonalTaskOrderService, useValue: { sort: (tasks: any[]) => tasks, canReorder: () => true } },
       { provide: TasksService, useValue: tasks }, { provide: AuthService, useValue: { currentUser: signal({ uid: 'self' }) } },
       { provide: NotificationService, useValue: { show: vi.fn() } }, { provide: Router, useValue: {} },
     ] }).compileComponents();
@@ -102,8 +104,8 @@ describe('Settings UI interactions', () => {
     ] }).compileComponents();
     fixture = TestBed.createComponent(SettingsComponent);
     await fixture.whenStable();
-    expect(fixture.nativeElement.querySelector('#team-holidays-body')).toBeNull();
-    expect(fixture.nativeElement.querySelector('#my-leaves-body')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#team-holidays-body').closest('.accordion-wrapper').classList.contains('open')).toBe(false);
+    expect(fixture.nativeElement.querySelector('#my-leaves-body').closest('.accordion-wrapper').classList.contains('open')).toBe(false);
     const toggles = fixture.nativeElement.querySelectorAll('.leave-collapse-btn');
     for (const toggle of toggles) {
       expect(toggle.getAttribute('aria-expanded')).toBe('false');
@@ -111,7 +113,6 @@ describe('Settings UI interactions', () => {
     }
     await fixture.whenStable();
   });
-  afterEach(() => vi.restoreAllMocks());
   afterEach(() => vi.restoreAllMocks());
   const click = (selector: string) => (fixture.nativeElement.querySelector(selector) as HTMLElement).click();
   async function input(selector: string, value: string) {
@@ -124,16 +125,16 @@ describe('Settings UI interactions', () => {
     click('#team-holidays-body .leave-editor-toggle'); await fixture.whenStable();
     await input('[aria-label="休日名"]', '会社休日');
     buttons[0].click(); await fixture.whenStable();
-    expect(fixture.nativeElement.querySelector('#team-holidays-body')).toBeNull();
-    expect(fixture.nativeElement.querySelector('#my-leaves-body')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('#team-holidays-body').closest('.accordion-wrapper').classList.contains('open')).toBe(false);
+    expect(fixture.nativeElement.querySelector('#my-leaves-body').closest('.accordion-wrapper').classList.contains('open')).toBe(true);
     expect(buttons[0].getAttribute('aria-expanded')).toBe('false');
     buttons[0].click(); await fixture.whenStable();
     expect(fixture.nativeElement.querySelector('#team-holidays-body [aria-label="休日名"]').value).toBe('会社休日');
     buttons[1].click(); await fixture.whenStable();
-    expect(fixture.nativeElement.querySelector('#my-leaves-body')).toBeNull();
-    expect(fixture.nativeElement.querySelector('#team-holidays-body')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('#my-leaves-body').closest('.accordion-wrapper').classList.contains('open')).toBe(false);
+    expect(fixture.nativeElement.querySelector('#team-holidays-body').closest('.accordion-wrapper').classList.contains('open')).toBe(true);
     buttons[1].click(); await fixture.whenStable();
-    expect(fixture.nativeElement.querySelector('#my-leaves-body')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('#my-leaves-body').closest('.accordion-wrapper').classList.contains('open')).toBe(true);
   });
   it('registers own afternoon leave from the UI and rejects half-day ranges', async () => {
     fixture.nativeElement.querySelectorAll('.leave-editor-toggle')[1].click(); await fixture.whenStable();

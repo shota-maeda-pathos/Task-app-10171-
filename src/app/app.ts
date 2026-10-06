@@ -387,6 +387,21 @@ import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/model
         </nav>
 
         <div class="toast-container">
+          @if (tasksService.isRecurrenceFailureTestEnabled()) {
+            <div class="toast recurrence-recovery">
+              <div class="toast-title">ローカル検証：次回生成を一度だけ失敗させる</div>
+              <div class="toast-body">専用のテスト用タスクを選び、セット後にそのタスクを完了してください。タスクは接続先のFirebaseに保存されます。</div>
+              <select aria-label="次回生成失敗を検証するタスク" [(ngModel)]="recurrenceTestTaskId">
+                <option value="">テスト用の繰り返しタスクを選択</option>
+                @for (task of tasksService.tasks(); track task.id) {
+                  @if (task.recurrence && task.status !== '完了' && task.status !== 'アーカイブ済み' && tasksService.canDeleteTask(task)) {
+                    <option [value]="task.id">{{ task.title }}</option>
+                  }
+                }
+              </select>
+              <button type="button" [disabled]="!recurrenceTestTaskId" (click)="armRecurrenceFailureTest()">一度だけ失敗をセット</button>
+            </div>
+          }
           @if (missingRecurrenceTasks().length > 0) {
             <div class="toast recurrence-recovery" role="status">
               <div class="toast-title">次回タスクが未生成です</div>
@@ -402,14 +417,9 @@ import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/model
             </div>
           }
           @for (toast of notificationService.toasts(); track toast.id) {
-            <div class="toast" (click)="!toast.retry && notificationService.dismiss(toast.id)">
+            <div class="toast" (click)="notificationService.dismiss(toast.id)">
               <div class="toast-title">{{ toast.title }}</div>
               <div class="toast-body">{{ toast.body }}</div>
-              @if (toast.retry) {
-                <button type="button" [disabled]="toast.busy" (click)="$event.stopPropagation(); notificationService.runRetry(toast.id)">
-                  {{ toast.busy ? '再試行中…' : '次回生成を再試行' }}
-                </button>
-              }
             </div>
           }
         </div>
@@ -685,6 +695,7 @@ import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/model
         margin-bottom: 4px;
       }
       .recurrence-recovery { max-height: 45vh; overflow-y: auto; cursor: default; }
+      .recurrence-recovery select { margin-top: 10px; width: 100%; color: var(--ink); background: var(--card); }
       .recurrence-recovery-item + .recurrence-recovery-item { margin-top: 12px; }
       .toast button {
         margin-top: 10px;
@@ -1322,6 +1333,16 @@ export class App {
     return this.tasksService.getMissingRecurrenceTasks();
   });
   retryingRecurrenceIds = signal(new Set<string>());
+  recurrenceTestTaskId = '';
+
+  armRecurrenceFailureTest(): void {
+    try {
+      this.tasksService.armRecurrenceFailureTest(this.recurrenceTestTaskId);
+      this.notificationService.show('検証準備完了', '選択したタスクを完了すると、次回生成が一度だけ失敗します');
+    } catch (error) {
+      this.notificationService.show('検証エラー', error instanceof Error ? error.message : '検証の準備に失敗しました');
+    }
+  }
 
   async retryMissingRecurrence(taskId: string): Promise<void> {
     if (this.retryingRecurrenceIds().has(taskId)) return;
@@ -1360,8 +1381,18 @@ export class App {
   });
 
   unreadCount = computed(() => this.notifList().filter((n: any) => !n.read).length);
+  private initialNavigationHandled = false;
+
+  private openHomeOnStartup(uid: string | null): void {
+    if (!uid || this.initialNavigationHandled) return;
+    this.initialNavigationHandled = true;
+    if (this.router.url.split('?')[0] !== '/board') {
+      void this.router.navigate(['/board'], { replaceUrl: true });
+    }
+  }
 
   constructor() {
+    effect(() => this.openHomeOnStartup(this.auth.currentUser()?.uid ?? null));
     // トースト通知: uidが変わったときだけ監視を開始する
     let prevUid: string | null = null;
     effect(() => {
@@ -1408,7 +1439,7 @@ export class App {
     this.googleLoginError = '';
     try {
       await this.auth.loginWithGoogle();
-      this.router.navigate(['/board']);
+      await this.router.navigate(['/board'], { replaceUrl: true });
     } catch (e: any) {
       if (e?.code === 'auth/popup-closed-by-user') {
         this.googleLoginError = 'ログインがキャンセルされました';
@@ -1425,6 +1456,8 @@ export class App {
     this.loginError = '';
     try {
       await this.auth.loginWithEmail(this.emailInput, this.passwordInput);
+      this.passwordInput = '';
+      await this.router.navigate(['/board'], { replaceUrl: true });
     } catch (e: any) {
       this.loginError = 'メールアドレスまたはパスワードが正しくありません';
     }
@@ -1486,8 +1519,8 @@ export class App {
   }
 
   async onLogout(): Promise<void> {
-    this.router.navigate([], { queryParams: {} });
     await this.auth.logout();
+    await this.router.navigate(['/board'], { replaceUrl: true });
   }
 
   // ===== FAB タスク作成 =====

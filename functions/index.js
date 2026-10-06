@@ -82,7 +82,7 @@ exports.onCommentCreated = onDocumentCreated(
 );
 
 exports.resetWeeklyFocus = onSchedule(
-  { schedule: 'every monday 06:00', timeZone: 'Asia/Tokyo', region: 'asia-northeast1' },
+  { schedule: 'every monday 06:00', timeZone: 'Asia/Tokyo', region: 'asia-northeast1', timeoutSeconds: 300 },
   async () => {
     await resetWeeklyFocus(db);
   }

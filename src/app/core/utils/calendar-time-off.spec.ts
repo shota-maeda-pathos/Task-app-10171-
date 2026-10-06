@@ -6,6 +6,7 @@ import { DashboardComponent } from '../../features/dashboard/dashboard';
 import { TasksService } from '../services/tasks.service';
 import { AuthService } from '../services/auth.service';
 import { NotificationService } from '../services/notification.service';
+import { PersonalTaskOrderService } from '../services/personal-task-order.service';
 import { Member, Task } from '../models/task.model';
 import { formatDateString } from './week-utils';
 
@@ -23,6 +24,7 @@ for (const component of [MyTasksComponent, DashboardComponent]) {
         { provide: TasksService, useValue: { tasks: signal([task]), members, teamSettings } },
         { provide: AuthService, useValue: { currentUser: signal({ uid: 'self' }) } },
         { provide: NotificationService, useValue: { show: () => {} } },
+        { provide: PersonalTaskOrderService, useValue: { sort: (tasks: Task[]) => tasks, canReorder: () => true } },
       ] }).overrideComponent(component, { set: { template: '' } }).compileComponents();
       const fixture = TestBed.createComponent<MyTasksComponent | DashboardComponent>(component);
       const day = () => fixture.componentInstance.calendarMonths()[0].days.find(day => day?.day === 12)!;
