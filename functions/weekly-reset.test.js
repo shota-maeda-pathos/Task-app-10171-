@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const { describe, it } = require('node:test');
-const { resetWeeklyFocus, getWeekMonday } = require('./weekly-reset');
+const { resetWeeklyFocus, getWeekMondayJST } = require('./weekly-reset');
 
 function ts(date) {
   return { toDate: () => new Date(date) };
@@ -61,55 +61,95 @@ function makeDb(tasks) {
   return db;
 }
 
+describe('getWeekMondayJST', () => {
+  it('UTC日曜21:00（JST月曜6:00）を今週の月曜と判定する', () => {
+    // 2026-10-04 Sun 21:00 UTC = 2026-10-05 Mon 06:00 JST
+    const utcSundayNight = new Date('2026-10-04T21:00:00Z');
+    const monday = getWeekMondayJST(utcSundayNight);
+    // JSTで10/5（月曜）の週の月曜 = 10/5
+    assert.equal(monday.getUTCFullYear(), 2026);
+    assert.equal(monday.getUTCMonth(), 9); // October = 9
+    assert.equal(monday.getUTCDate(), 5);
+  });
+
+  it('UTC月曜0:00（JST月曜9:00）を今週の月曜と判定する', () => {
+    const utcMonday = new Date('2026-10-05T00:00:00Z');
+    const monday = getWeekMondayJST(utcMonday);
+    assert.equal(monday.getUTCDate(), 5);
+  });
+});
+
 describe('resetWeeklyFocus', () => {
-  // 月曜6時にリセットされる想定。nowは月曜AM6:00
-  const monday = new Date('2026-10-05T06:00:00+09:00');
-  const lastMonday = new Date('2026-09-28T00:00:00+09:00');
-  const thisMonday = getWeekMonday(monday);
+  // Cloud Functionsは月曜6:00 JSTに発火 = 日曜21:00 UTC
+  const fireTime = new Date('2026-10-04T21:00:00Z');
+  const thisMondayJST = getWeekMondayJST(fireTime);
+  const lastMondayJST = new Date(thisMondayJST);
+  lastMondayJST.setUTCDate(lastMondayJST.getUTCDate() - 7);
 
   it('先週のfocusタスクをリセットし、今週のtargetWeekStartは残す', async () => {
     const db = makeDb([
-      { id: 'last-week', focusThisWeek: true, focusHours: 3, status: '未着手', targetWeekStart: ts(lastMonday) },
-      { id: 'this-week', focusThisWeek: true, focusHours: 5, status: '進行中', targetWeekStart: ts(thisMonday) },
+      { id: 'last-week', focusThisWeek: true, focusHours: 3, status: '未着手', targetWeekStart: ts(lastMondayJST) },
+      { id: 'this-week', focusThisWeek: true, focusHours: 5, status: '進行中', targetWeekStart: ts(thisMondayJST) },
       { id: 'no-target', focusThisWeek: true, focusHours: 2, status: '未着手', targetWeekStart: null },
     ]);
 
-    const result = await resetWeeklyFocus(db, () => monday);
+    const result = await resetWeeklyFocus(db, () => fireTime);
 
     assert.equal(result.reset, 2);
-    // 先週のタスクはリセットされる
     assert.equal(db.records.get('tasks/last-week').focusThisWeek, false);
     assert.equal(db.records.get('tasks/last-week').focusHours, null);
-    // targetWeekStartなしもリセットされる
     assert.equal(db.records.get('tasks/no-target').focusThisWeek, false);
     // 今週のタスクは残る
     assert.equal(db.records.get('tasks/this-week').focusThisWeek, true);
     assert.equal(db.records.get('tasks/this-week').focusHours, 5);
   });
 
+  it('差し戻し中のタスクもリセット対象になる', async () => {
+    const db = makeDb([
+      { id: 'review', focusThisWeek: true, focusHours: 3, status: '差し戻し中', targetWeekStart: ts(lastMondayJST) },
+    ]);
+
+    const result = await resetWeeklyFocus(db, () => fireTime);
+
+    assert.equal(result.reset, 1);
+    assert.equal(db.records.get('tasks/review').focusThisWeek, false);
+  });
+
   it('targetWeekStartが今週のタスクを自動ONにする', async () => {
     const db = makeDb([
-      { id: 'scheduled', focusThisWeek: false, focusHours: null, status: '未着手', targetWeekStart: ts(thisMonday), estimatedHours: 4 },
+      { id: 'scheduled', focusThisWeek: false, focusHours: null, status: '未着手', targetWeekStart: ts(thisMondayJST), estimatedHours: 4 },
       { id: 'next-week', focusThisWeek: false, focusHours: null, status: '未着手', targetWeekStart: ts(new Date('2026-10-12')), estimatedHours: 3 },
     ]);
 
-    const result = await resetWeeklyFocus(db, () => monday);
+    const result = await resetWeeklyFocus(db, () => fireTime);
 
     assert.equal(result.activated, 1);
     assert.equal(db.records.get('tasks/scheduled').focusThisWeek, true);
     assert.equal(db.records.get('tasks/scheduled').focusHours, 4);
-    // 来週のタスクはOFFのまま
     assert.equal(db.records.get('tasks/next-week').focusThisWeek, false);
   });
 
   it('完了タスクはリセットも自動ONもしない', async () => {
     const db = makeDb([
-      { id: 'done', focusThisWeek: true, focusHours: 3, status: '完了', targetWeekStart: ts(lastMonday) },
+      { id: 'done', focusThisWeek: true, focusHours: 3, status: '完了', targetWeekStart: ts(lastMondayJST) },
     ]);
 
-    const result = await resetWeeklyFocus(db, () => monday);
+    const result = await resetWeeklyFocus(db, () => fireTime);
     assert.equal(result.reset, 0);
     assert.equal(result.activated, 0);
+  });
+
+  it('UTC日曜21:00でも正しく今週を判定する（タイムゾーンバグ回帰テスト）', async () => {
+    // Cloud Functionsが日曜21:00 UTC（= 月曜6:00 JST）に実行される
+    const db = makeDb([
+      { id: 'a', focusThisWeek: true, focusHours: 3, status: '未着手', targetWeekStart: ts(thisMondayJST) },
+    ]);
+
+    const result = await resetWeeklyFocus(db, () => fireTime);
+
+    // 今週のタスクはリセットされない
+    assert.equal(result.reset, 0);
+    assert.equal(db.records.get('tasks/a').focusThisWeek, true);
   });
 
   it('450件を超えてもバッチが正しく分割される', async () => {
@@ -120,15 +160,14 @@ describe('resetWeeklyFocus', () => {
         focusThisWeek: true,
         focusHours: 1,
         status: '未着手',
-        targetWeekStart: ts(lastMonday),
+        targetWeekStart: ts(lastMondayJST),
       });
     }
     const db = makeDb(tasks);
 
-    const result = await resetWeeklyFocus(db, () => monday);
+    const result = await resetWeeklyFocus(db, () => fireTime);
 
     assert.equal(result.reset, 500);
-    // 全件リセットされていること
     for (let i = 0; i < 500; i++) {
       assert.equal(db.records.get(`tasks/task-${i}`).focusThisWeek, false);
     }

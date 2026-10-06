@@ -1,21 +1,27 @@
-const { Timestamp } = require('firebase-admin/firestore');
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
-function getWeekMonday(date) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  const day = d.getDay();
-  d.setDate(d.getDate() - ((day + 6) % 7));
-  return d;
+const ACTIVE_STATUSES = ['未着手', '進行中', '差し戻し中'];
+
+function toJST(date) {
+  return new Date(date.getTime() + JST_OFFSET_MS);
+}
+
+function getWeekMondayJST(date) {
+  const jst = toJST(date);
+  jst.setUTCHours(0, 0, 0, 0);
+  const day = jst.getUTCDay();
+  jst.setUTCDate(jst.getUTCDate() - ((day + 6) % 7));
+  return jst;
 }
 
 async function resetWeeklyFocus(db, now = () => new Date()) {
-  const currentMonday = getWeekMonday(now());
+  const currentMonday = getWeekMondayJST(now());
 
   // 1. 今週より前のfocusをリセット
   const focusedSnapshot = await db
     .collection('tasks')
     .where('focusThisWeek', '==', true)
-    .where('status', 'in', ['未着手', '進行中', 'レビュー中'])
+    .where('status', 'in', ACTIVE_STATUSES)
     .get();
 
   let resetCount = 0;
@@ -27,7 +33,7 @@ async function resetWeeklyFocus(db, now = () => new Date()) {
     const targetWeek = data.targetWeekStart?.toDate
       ? data.targetWeekStart.toDate()
       : data.targetWeekStart;
-    const taskMonday = targetWeek ? getWeekMonday(targetWeek) : null;
+    const taskMonday = targetWeek ? getWeekMondayJST(targetWeek) : null;
 
     // targetWeekStartが今週の月曜なら今週設定分なのでスキップ
     if (taskMonday && taskMonday.getTime() === currentMonday.getTime()) continue;
@@ -54,7 +60,7 @@ async function resetWeeklyFocus(db, now = () => new Date()) {
   const scheduledSnapshot = await db
     .collection('tasks')
     .where('focusThisWeek', '==', false)
-    .where('status', 'in', ['未着手', '進行中', 'レビュー中'])
+    .where('status', 'in', ACTIVE_STATUSES)
     .get();
 
   let activatedCount = 0;
@@ -68,7 +74,7 @@ async function resetWeeklyFocus(db, now = () => new Date()) {
     const targetWeek = data.targetWeekStart.toDate
       ? data.targetWeekStart.toDate()
       : data.targetWeekStart;
-    const taskMonday = getWeekMonday(targetWeek);
+    const taskMonday = getWeekMondayJST(targetWeek);
 
     if (taskMonday.getTime() !== currentMonday.getTime()) continue;
 
@@ -97,4 +103,4 @@ async function resetWeeklyFocus(db, now = () => new Date()) {
   return { reset: resetCount, activated: activatedCount };
 }
 
-module.exports = { resetWeeklyFocus, getWeekMonday };
+module.exports = { resetWeeklyFocus, getWeekMondayJST };
