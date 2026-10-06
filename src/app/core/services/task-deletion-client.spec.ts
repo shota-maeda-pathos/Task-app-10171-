@@ -1,14 +1,45 @@
 import { deletionMocks } from './deletion-test-mocks';
 import { signal } from '@angular/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { TasksService } from './tasks.service';
+import { TasksService, RecurrenceGenerationError } from './tasks.service';
 import { DashboardComponent } from '../../features/dashboard/dashboard';
 import { BoardComponent } from '../../features/board/board.component';
 import { MyTasksComponent } from '../../features/my-tasks/my-tasks';
 import { Timestamp } from 'firebase/firestore';
+import { NotificationService } from './notification.service';
 import { getWeekMonday } from '../utils/week-utils';
 
 const { invoke } = deletionMocks;
+
+describe('scheduled focus at the Monday boundary', () => {
+  it('activates next-week tasks only after the date reaches Monday', async () => {
+    vi.useFakeTimers();
+    try {
+      deletionMocks.updateDoc.mockReset().mockResolvedValue(undefined);
+      deletionMocks.doc.mockReturnValue({});
+      const service: any = Object.assign(Object.create(TasksService.prototype), { firestore: {} });
+      const tasks = [{ id: 'scheduled', status: '未着手', focusThisWeek: false,
+        estimatedHours: 8, focusHours: 3, targetWeekStart: Timestamp.fromDate(new Date(2026, 9, 12)) }];
+      vi.setSystemTime(new Date(2026, 9, 11, 23, 59));
+      await service.autoActivateWeeklyFocus(tasks);
+      expect(deletionMocks.updateDoc).not.toHaveBeenCalled();
+      vi.setSystemTime(new Date(2026, 9, 12, 6));
+      await service.autoActivateWeeklyFocus(tasks);
+      expect(deletionMocks.updateDoc).toHaveBeenCalledExactlyOnceWith({}, { focusThisWeek: true, focusHours: 3 });
+    } finally { vi.useRealTimers(); }
+  });
+  it('does not reactivate reset tasks that were scheduled for the previous week', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(2026, 9, 12, 6));
+      deletionMocks.updateDoc.mockReset().mockResolvedValue(undefined);
+      const service: any = Object.assign(Object.create(TasksService.prototype), { firestore: {} });
+      await service.autoActivateWeeklyFocus([{ id: 'old', status: '進行中', focusThisWeek: false,
+        estimatedHours: 8, focusHours: null, targetWeekStart: Timestamp.fromDate(new Date(2026, 9, 5)) }]);
+      expect(deletionMocks.updateDoc).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
+});
 
 describe('completed child workload never returns to the parent assignee', () => {
   function setup(otherStatus = '未着手', ownStatus = '未着手') {
@@ -393,6 +424,13 @@ describe('shared task completion', () => {
     expect(deletionMocks.updateDoc).not.toHaveBeenCalled();
     expect(service.spawnRecurrence).not.toHaveBeenCalled();
   });
+  it('recovers generation on a completed recurring task without saving completion again', async () => {
+    const completed = { ...task, status: '完了', recurrence: 'weekly' };
+    service.tasks.set([completed]);
+    await service.completeTask('child', 99);
+    expect(deletionMocks.updateDoc).not.toHaveBeenCalled();
+    expect(service.spawnRecurrence).toHaveBeenCalledExactlyOnceWith(completed);
+  });
 });
 
 for (const Component of [BoardComponent, MyTasksComponent]) {
@@ -402,7 +440,7 @@ for (const Component of [BoardComponent, MyTasksComponent]) {
       const component: any = Object.create(Component.prototype);
       Object.assign(component, {
         tasksService: { isBlocked: vi.fn(() => blocked), completeTask: vi.fn().mockResolvedValue(undefined) },
-        notificationService: { show: vi.fn() }, canMoveTask: () => true,
+        notificationService: { show: vi.fn(), showRetry: vi.fn() }, canMoveTask: () => true,
         expandedTaskId: signal('parent'), columns: ['未着手'],
       });
       return component;
@@ -433,6 +471,135 @@ for (const Component of [BoardComponent, MyTasksComponent]) {
       await component.confirmComplete();
       expect(component.completingTask).toBe(task);
     });
+    it('closes the completed task dialog and offers generation-only retry', async () => {
+      const component = setup();
+      const retry = vi.fn().mockResolvedValue(undefined);
+      component.completingTask = task;
+      component.actualHoursInput = 1;
+      component.tasksService.completeTask.mockRejectedValue(new RecurrenceGenerationError(retry));
+      await component.confirmComplete();
+      expect(component.completingTask).toBeNull();
+      expect(component.notificationService.showRetry).toHaveBeenCalledExactlyOnceWith(retry);
+      expect(component.notificationService.show).not.toHaveBeenCalled();
+    });
   });
 }
 
+
+
+describe('recurrence generation recovery', () => {
+  let records: Map<string, any>;
+  let services: any[];
+  let serial: Promise<any>;
+  let nextId: number;
+  let failCommit: boolean;
+  let loseAcknowledgement: boolean;
+  let conflicts: number;
+  const source = { id: 'source', title: 'Recurring', status: '完了', parentId: null,
+    assigneeId: 'owner', createdBy: 'creator', estimatedHours: 8, actualHours: 5,
+    recurrence: 'weekly', dueDate: Timestamp.fromDate(new Date(2026, 9, 6)), priority: '高' };
+  beforeEach(() => {
+    records = new Map([['source', { ...source }]]);
+    nextId = 0; failCommit = false; loseAcknowledgement = false; conflicts = 0; serial = Promise.resolve();
+    deletionMocks.doc.mockImplementation((...args: any[]) => ({ id: args.length === 1 ? 'next-' + ++nextId : args[2] }));
+    deletionMocks.getDocs.mockImplementation(async () => ({ docs: [...records].filter(([, data]) => data.recurrencePreviousTaskId === 'source')
+      .map(([id, data]) => ({ ref: { id }, data: () => data })) }));
+    deletionMocks.getDoc.mockImplementation(async (ref: any) => ({ exists: () => records.has(ref.id), data: () => ({ ...records.get(ref.id) }) }));
+    deletionMocks.runTransaction.mockImplementation((_db: unknown, callback: any) => {
+      const request = serial.then(async () => {
+        let writes: (() => void)[] = [];
+        const transaction = {
+          get: async (ref: any) => ({ exists: () => records.has(ref.id), data: () => ({ ...records.get(ref.id) }) }),
+          set: (ref: any, data: any) => writes.push(() => records.set(ref.id, data)),
+          update: (ref: any, data: any) => writes.push(() => records.set(ref.id, { ...records.get(ref.id), ...data })),
+        };
+        let result = await callback(transaction);
+        if (conflicts) {
+          conflicts--; writes = []; result = await callback(transaction);
+        }
+        if (failCommit) { failCommit = false; throw new Error('offline'); }
+        writes.forEach(write => write());
+        if (loseAcknowledgement) { loseAcknowledgement = false; throw new Error('response lost'); }
+        return result;
+      });
+      serial = request.catch(() => {});
+      return request;
+    });
+    services = [0, 1].map(() => Object.assign(Object.create(TasksService.prototype), {
+      firestore: {}, tasksCollection: {}, auth: { currentUser: { uid: 'owner' } }, members: signal([]),
+      addActivity: vi.fn().mockResolvedValue(undefined), addNotification: vi.fn().mockResolvedValue(undefined),
+      syncParentEstimate: vi.fn().mockResolvedValue(undefined),
+    }));
+  });
+  function occurrences() { return [...records.values()].filter(data => data.recurrencePreviousTaskId === 'source'); }
+  it('creates one next task across independent service instances', async () => {
+    await Promise.all(services.map(service => service.spawnRecurrence(source)));
+    expect(occurrences()).toHaveLength(1);
+    expect(records.get('source').recurrenceNextTaskId).toBeTruthy();
+    expect(services.reduce((sum, service) => sum + service.addActivity.mock.calls.length, 0)).toBe(1);
+  });
+  it('survives transaction callback retries without duplicate tasks', async () => {
+    conflicts = 1;
+    await services[0].spawnRecurrence(source);
+    expect(occurrences()).toHaveLength(1);
+  });
+  it('retries a failed atomic commit without changing completion or actual hours', async () => {
+    failCommit = true;
+    await expect(services[0].spawnRecurrence(source)).rejects.toThrow('offline');
+    expect(occurrences()).toHaveLength(0);
+    expect(records.get('source').recurrenceNextTaskId).toBeUndefined();
+    await services[1].retryRecurrence('source');
+    expect(occurrences()).toHaveLength(1);
+    expect(records.get('source')).toMatchObject({ status: '完了', actualHours: 5 });
+    expect(occurrences()[0]).toMatchObject({ estimatedHours: 8, assigneeId: 'owner', createdBy: 'creator', recurrence: 'weekly', focusThisWeek: false });
+    expect(occurrences()[0].dueDate.toDate()).toEqual(new Date(2026, 9, 13));
+  });
+  it('does not recreate a task when the commit succeeded but its response was lost', async () => {
+    loseAcknowledgement = true;
+    await expect(services[0].spawnRecurrence(source)).rejects.toThrow('response lost');
+    await services[1].retryRecurrence('source');
+    expect(occurrences()).toHaveLength(1);
+  });
+  it('adopts an existing task from the previous implementation', async () => {
+    records.set('legacy', { recurrencePreviousTaskId: 'source' });
+    await services[0].retryRecurrence('source');
+    expect(records.get('source').recurrenceNextTaskId).toBe('legacy');
+    expect(occurrences()).toHaveLength(1);
+    expect(services[0].addActivity).not.toHaveBeenCalled();
+  });
+  it('keeps the generated marker when the next task has subsequently been deleted', async () => {
+    await services[0].spawnRecurrence(source);
+    records.delete(records.get('source').recurrenceNextTaskId);
+    await services[1].retryRecurrence('source');
+    expect(occurrences()).toHaveLength(0);
+  });
+  it('rejects generating a next occurrence for an unfinished task', async () => {
+    records.set('source', { ...source, status: '未着手' });
+    await expect(services[0].retryRecurrence('source')).rejects.toThrow('完了済み');
+    expect(occurrences()).toHaveLength(0);
+  });
+});
+
+describe('recurrence retry notification', () => {
+  it('keeps the button after a retry failure and avoids concurrent clicks', async () => {
+    const notifications = new NotificationService();
+    let reject!: (error: Error) => void;
+    const retry = vi.fn(() => new Promise<void>((_resolve, fail) => reject = fail));
+    notifications.showRetry(retry);
+    const id = notifications.toasts()[0].id;
+    const pending = notifications.runRetry(id);
+    await notifications.runRetry(id);
+    expect(retry).toHaveBeenCalledTimes(1);
+    reject(new Error('offline')); await pending;
+    expect(notifications.toasts()[0].busy).toBe(false);
+    retry.mockResolvedValueOnce(undefined);
+    await notifications.runRetry(id);
+    expect(notifications.toasts().some(toast => toast.retry)).toBe(false);
+  });
+  it('keeps a failed generation available when another notification arrives', () => {
+    const notifications = new NotificationService();
+    notifications.showRetry(vi.fn());
+    notifications.show('Saved', 'Saved');
+    expect(notifications.toasts().filter(toast => toast.retry)).toHaveLength(1);
+  });
+});

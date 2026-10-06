@@ -15,7 +15,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CdkDrag, CdkDragDrop, DragDropModule, moveItemInArray } from '@angular/cdk/drag-drop';
 import { ActivatedRoute, Router } from '@angular/router';
-import { TasksService } from '../../core/services/tasks.service';
+import { TasksService, RecurrenceGenerationError } from '../../core/services/tasks.service';
 import { AuthService } from '../../core/services/auth.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { CommentPanelComponent } from './comment-panel/comment-panel';
@@ -398,7 +398,13 @@ export class BoardComponent {
         if (!task || !this.canMoveTask(task)) continue;
         if (this.bulkStatus === '完了') {
           if (this.tasksService.isBlocked(task)) continue;
-          await this.tasksService.completeTask(id, task.estimatedHours ?? 0);
+          try {
+            await this.tasksService.completeTask(id, task.estimatedHours ?? 0);
+          } catch (error) {
+            if (error instanceof RecurrenceGenerationError) this.notificationService.showRetry(error.retry);
+            else this.notificationService.show('完了エラー', error instanceof Error ? error.message : 'タスクの完了に失敗しました');
+            return;
+          }
         } else {
           await this.tasksService.updateStatus(id, this.bulkStatus as TaskStatus);
         }
@@ -1499,7 +1505,8 @@ export class BoardComponent {
         await this.tasksService.completeTask(task.id, 0);
         this.notificationService.show('完了', `「${task.title}」を完了にしました`);
       } catch (error) {
-        this.notificationService.show('完了エラー', error instanceof Error ? error.message : 'タスクの完了に失敗しました');
+        if (error instanceof RecurrenceGenerationError) this.notificationService.showRetry(error.retry);
+        else this.notificationService.show('完了エラー', error instanceof Error ? error.message : 'タスクの完了に失敗しました');
       }
       return;
     }
@@ -1520,7 +1527,10 @@ export class BoardComponent {
       this.completingTask = null;
       this.notificationService.show('完了', `「${task.title}」を完了にしました`);
     } catch (error) {
-      this.notificationService.show('完了エラー', error instanceof Error ? error.message : 'タスクの完了に失敗しました');
+      if (error instanceof RecurrenceGenerationError) {
+        this.completingTask = null;
+        this.notificationService.showRetry(error.retry);
+      } else this.notificationService.show('完了エラー', error instanceof Error ? error.message : 'タスクの完了に失敗しました');
     }
   }
 

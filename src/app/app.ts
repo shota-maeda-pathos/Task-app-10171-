@@ -388,9 +388,14 @@ import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/model
 
         <div class="toast-container">
           @for (toast of notificationService.toasts(); track toast.id) {
-            <div class="toast" (click)="notificationService.dismiss(toast.id)">
+            <div class="toast" (click)="!toast.retry && notificationService.dismiss(toast.id)">
               <div class="toast-title">{{ toast.title }}</div>
               <div class="toast-body">{{ toast.body }}</div>
+              @if (toast.retry) {
+                <button type="button" [disabled]="toast.busy" (click)="$event.stopPropagation(); notificationService.runRetry(toast.id)">
+                  {{ toast.busy ? '再試行中…' : '次回生成を再試行' }}
+                </button>
+              }
             </div>
           }
         </div>
@@ -624,7 +629,7 @@ import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/model
         padding: 10px 12px;
         border: 1px solid var(--line);
         border-radius: 8px;
-        font-size: 16px;
+        font-size: 13px;
         font-family: inherit;
       }
       .email-input:focus {
@@ -665,6 +670,16 @@ import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/model
         font-weight: 600;
         margin-bottom: 4px;
       }
+      .toast button {
+        margin-top: 10px;
+        padding: 8px 12px;
+        border: 1px solid currentColor;
+        border-radius: 6px;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+      }
+      .toast button:disabled { opacity: 0.6; cursor: wait; }
       .toast-body {
         font-size: 12px;
         opacity: 0.8;
@@ -1001,8 +1016,12 @@ import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/model
         transition: border-color 0.15s;
         height: 40px;
         box-sizing: border-box;
+        -webkit-appearance: none;
+        appearance: none;
       }
       select.fab-input {
+        -webkit-appearance: menulist;
+        appearance: menulist;
         padding-right: 32px;
       }
       .fab-input:focus {

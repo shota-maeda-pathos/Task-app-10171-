@@ -38,6 +38,7 @@ export interface Task {
   recurrence: RecurrenceType | null;
   recurrenceSourceId: string | null;
   recurrencePreviousTaskId?: string | null;
+  recurrenceNextTaskId?: string | null;
 }
 
 export type LeavePeriod = 'full' | 'am' | 'pm';

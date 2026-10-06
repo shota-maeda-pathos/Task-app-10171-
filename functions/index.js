@@ -3,6 +3,7 @@ const admin = require('firebase-admin');
 const { onCall } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { deleteTaskAtomically, cleanupDeletedTask } = require('./task-deletion');
+const { resetWeeklyFocus } = require('./weekly-reset');
 
 admin.initializeApp();
 
@@ -77,5 +78,12 @@ exports.onCommentCreated = onDocumentCreated(
     }
 
     return null;
+  }
+);
+
+exports.resetWeeklyFocus = onSchedule(
+  { schedule: 'every monday 06:00', timeZone: 'Asia/Tokyo', region: 'asia-northeast1' },
+  async () => {
+    await resetWeeklyFocus(db);
   }
 );

@@ -5,7 +5,7 @@ export const deletionMocks = vi.hoisted(() => ({
   deleteDoc: vi.fn().mockResolvedValue(undefined), setDoc: vi.fn().mockResolvedValue(undefined),
   updateDoc: vi.fn().mockResolvedValue(undefined),
   getDocs: vi.fn(), query: vi.fn(() => ({})),
-  runTransaction: vi.fn(async (_firestore: unknown, callback: any) => callback({ get: deletionMocks.getDoc, update: deletionMocks.updateDoc })),
+  runTransaction: vi.fn(async (_firestore: unknown, callback: any) => callback({ get: deletionMocks.getDoc, update: deletionMocks.updateDoc, set: deletionMocks.setDoc })),
   ref: vi.fn(() => ({})), deleteObject: vi.fn(),
 }));
 vi.mock('firebase/firestore', async importOriginal => ({

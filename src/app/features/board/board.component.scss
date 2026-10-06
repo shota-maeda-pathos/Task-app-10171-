@@ -1164,12 +1164,16 @@
     border-radius: 10px;
     padding: 12px;
     background: var(--card);
+    max-width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
 
     input[type="text"],
     input[type="number"],
     select,
     input[type="date"] {
         width: 100%;
+        min-width: 0;
         padding: 8px 10px;
         border: 1px solid var(--line);
         border-radius: 7px;
@@ -1178,11 +1182,21 @@
         margin-bottom: 8px;
         background: var(--card);
         color: var(--ink);
+        height: 36px;
+        box-sizing: border-box;
+        -webkit-appearance: none;
+        appearance: none;
 
         &:focus {
             outline: none;
             border-color: var(--accent);
         }
+    }
+
+    select {
+        -webkit-appearance: menulist;
+        appearance: menulist;
+        padding-right: 28px;
     }
 }
 
@@ -3143,6 +3157,7 @@ input[type="date"] {
         flex-direction: column;
         gap: 10px;
     }
+
 
     .template-trigger {
         font-size: 10px;

@@ -14,7 +14,7 @@ import {
 import { CommonModule } from '@angular/common';
 import { CdkDragDrop, DragDropModule, moveItemInArray } from '@angular/cdk/drag-drop';
 import { Router } from '@angular/router';
-import { TasksService } from '../../core/services/tasks.service';
+import { TasksService, RecurrenceGenerationError } from '../../core/services/tasks.service';
 import { AuthService } from '../../core/services/auth.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { Timestamp } from '@angular/fire/firestore';
@@ -594,7 +594,8 @@ export class MyTasksComponent {
         this.notificationService.show('完了', `「${task.title}」を完了にしました`);
         if (!task.parentId) this.expandedTaskId.set(null);
       } catch (error) {
-        this.notificationService.show('完了エラー', error instanceof Error ? error.message : 'タスクの完了に失敗しました');
+        if (error instanceof RecurrenceGenerationError) this.notificationService.showRetry(error.retry);
+        else this.notificationService.show('完了エラー', error instanceof Error ? error.message : 'タスクの完了に失敗しました');
       }
       return;
     }
@@ -617,7 +618,10 @@ export class MyTasksComponent {
       this.completingTask = null;
       if (!isSubtask) this.expandedTaskId.set(null);
     } catch (error) {
-      this.notificationService.show('完了エラー', error instanceof Error ? error.message : 'タスクの完了に失敗しました');
+      if (error instanceof RecurrenceGenerationError) {
+        this.completingTask = null;
+        this.notificationService.showRetry(error.retry);
+      } else this.notificationService.show('完了エラー', error instanceof Error ? error.message : 'タスクの完了に失敗しました');
     }
   }
 
