@@ -114,7 +114,8 @@
           </button>
         </div>
 
-        @if (showOtherMembers()) {
+        <div class="accordion-wrapper" [class.open]="showOtherMembers()">
+          <div class="accordion-inner">
           <div
             class="load-others"
             cdkDropList
@@ -164,7 +165,8 @@
               </div>
             }
           </div>
-        }
+          </div>
+        </div>
       }
     </div>
   </div>
@@ -241,7 +243,8 @@
             <span class="load-toggle-arrow" [class.open]="showOtherForecast()">▴</span>
           </button>
         </div>
-        @if (showOtherForecast()) {
+        <div class="accordion-wrapper" [class.open]="showOtherForecast()">
+          <div class="accordion-inner">
           <div
             class="load-others"
             cdkDropList
@@ -295,7 +298,8 @@
               </div>
             }
           </div>
-        }
+          </div>
+        </div>
       }
     </div>
   </div>

@@ -654,6 +654,21 @@
     }
 }
 
+.accordion-wrapper {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.3s ease;
+
+    &.open {
+        grid-template-rows: 1fr;
+    }
+}
+
+.accordion-inner {
+    overflow: hidden;
+    min-height: 0;
+}
+
 /* テーマピッカー */
 .theme-grid {
     display: grid;
@@ -1593,12 +1608,12 @@
   padding: 0;
   .leave-collapse-btn { border: 0; border-radius: 11px; }
   .leave-collapse-btn:hover { box-shadow: inset 0 0 0 1px var(--accent); }
-  #team-holidays-body, #my-leaves-body { padding: 0 18px 18px; }
+  .accordion-content { padding: 4px 18px 18px; }
 }
 @media (max-width: 480px) {
   .leave-card.leave-collapsible {
     .leave-collapse-btn { padding: 14px 16px; }
-    #team-holidays-body, #my-leaves-body { padding: 0 16px 16px; }
+    .accordion-content { padding: 0 16px 16px; }
   }
 }
 

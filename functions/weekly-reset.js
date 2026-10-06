@@ -25,35 +25,27 @@ async function resetWeeklyFocus(db, now = () => new Date()) {
     .get();
 
   let resetCount = 0;
-  let batch = db.batch();
-  let batchCount = 0;
-
   for (const doc of focusedSnapshot.docs) {
-    const data = doc.data();
+    const changed = await db.runTransaction(async transaction => {
+    const latest = await transaction.get(doc.ref);
+    if (!latest.exists) return false;
+    const data = latest.data();
+    if (!data.focusThisWeek || !ACTIVE_STATUSES.includes(data.status)) return false;
     const targetWeek = data.targetWeekStart?.toDate
       ? data.targetWeekStart.toDate()
       : data.targetWeekStart;
     const taskMonday = targetWeek ? getWeekMondayJST(targetWeek) : null;
 
     // targetWeekStartが今週の月曜なら今週設定分なのでスキップ
-    if (taskMonday && taskMonday.getTime() === currentMonday.getTime()) continue;
+    if (taskMonday && taskMonday.getTime() >= currentMonday.getTime()) return false;
 
-    batch.update(doc.ref, {
+    transaction.update(doc.ref, {
       focusThisWeek: false,
       focusHours: null,
     });
-    resetCount++;
-    batchCount++;
-
-    if (batchCount >= 450) {
-      await batch.commit();
-      batch = db.batch();
-      batchCount = 0;
-    }
-  }
-
-  if (batchCount > 0) {
-    await batch.commit();
+    return true;
+    });
+    if (changed) resetCount++;
   }
 
   // 2. targetWeekStartが今週のタスクを自動ON
@@ -64,39 +56,30 @@ async function resetWeeklyFocus(db, now = () => new Date()) {
     .get();
 
   let activatedCount = 0;
-  batch = db.batch();
-  batchCount = 0;
-
   for (const doc of scheduledSnapshot.docs) {
-    const data = doc.data();
-    if (!data.targetWeekStart) continue;
+    const changed = await db.runTransaction(async transaction => {
+    const latest = await transaction.get(doc.ref);
+    if (!latest.exists) return false;
+    const data = latest.data();
+    if (data.focusThisWeek || !ACTIVE_STATUSES.includes(data.status) || !data.targetWeekStart) return false;
 
     const targetWeek = data.targetWeekStart.toDate
       ? data.targetWeekStart.toDate()
       : data.targetWeekStart;
     const taskMonday = getWeekMondayJST(targetWeek);
 
-    if (taskMonday.getTime() !== currentMonday.getTime()) continue;
+    if (taskMonday.getTime() !== currentMonday.getTime()) return false;
 
     const estimatedHours = data.estimatedHours ?? 0;
     const focusHours = data.focusHours ?? estimatedHours;
 
-    batch.update(doc.ref, {
+    transaction.update(doc.ref, {
       focusThisWeek: true,
       focusHours: Math.min(Math.max(0, focusHours), estimatedHours),
     });
-    activatedCount++;
-    batchCount++;
-
-    if (batchCount >= 450) {
-      await batch.commit();
-      batch = db.batch();
-      batchCount = 0;
-    }
-  }
-
-  if (batchCount > 0) {
-    await batch.commit();
+    return true;
+    });
+    if (changed) activatedCount++;
   }
 
   console.log(`リセット: ${resetCount}件, 自動ON: ${activatedCount}件`);

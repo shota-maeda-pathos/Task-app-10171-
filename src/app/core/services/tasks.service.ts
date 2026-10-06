@@ -1412,6 +1412,14 @@ export class TasksService {
 
   // --- 繰り返しタスク生成 ---
 
+  getMissingRecurrenceTasks(): Task[] {
+    const tasks = this.tasks();
+    const predecessors = new Set(tasks.map(task => task.recurrencePreviousTaskId).filter(Boolean));
+    return tasks.filter(task => !!task.recurrence &&
+      (task.status === '完了' || task.status === 'アーカイブ済み') &&
+      !task.recurrenceNextTaskId && !predecessors.has(task.id) && this.canDeleteTask(task));
+  }
+
   async retryRecurrence(taskId: string): Promise<void> {
     const snapshot = await getDoc(doc(this.firestore, 'tasks', taskId));
     if (!snapshot.exists()) throw new Error('元のタスクが見つかりません');

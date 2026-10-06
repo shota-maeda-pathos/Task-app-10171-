@@ -129,8 +129,9 @@
           >▾</span
         >
       </button>
-      @if (teamHolidaysExpanded()) {
-        <div id="team-holidays-body">
+      <div class="accordion-wrapper" [class.open]="teamHolidaysExpanded()">
+        <div class="accordion-inner">
+          <div class="accordion-content" id="team-holidays-body">
           @for (holiday of teamHolidays(); track holiday.date) {
             <div class="leave-entry">
               <span class="leave-date-tile"
@@ -235,8 +236,9 @@
               }
             </div>
           }
+          </div>
         </div>
-      }
+      </div>
     </section>
     <section class="leave-card leave-collapsible">
       <button
@@ -257,8 +259,9 @@
           >▾</span
         >
       </button>
-      @if (myLeavesExpanded()) {
-        <div id="my-leaves-body">
+      <div class="accordion-wrapper" [class.open]="myLeavesExpanded()">
+        <div class="accordion-inner">
+          <div class="accordion-content" id="my-leaves-body">
           @for (leave of myLeaves(); track leave.date) {
             <div class="leave-entry">
               <span class="leave-date-tile"
@@ -360,8 +363,9 @@
           <p class="leave-hint">
             連続する休暇は開始日と終了日を指定して登録できます（平日のみ）。終了日が空欄の場合は開始日のみ登録します。半休は単日のみ登録できます。
           </p>
+          </div>
         </div>
-      }
+      </div>
     </section>
   </div>
 

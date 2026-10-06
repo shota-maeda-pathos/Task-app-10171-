@@ -42,6 +42,23 @@ function makeDb(tasks) {
         },
       };
     },
+    async runTransaction(callback) {
+      const ops = [];
+      if (db.beforeTransaction) {
+        const hook = db.beforeTransaction;
+        db.beforeTransaction = null;
+        hook(records);
+      }
+      const result = await callback({
+        async get(ref) {
+          const value = records.get(ref.path);
+          return { exists: !!value, data: () => ({ ...value }) };
+        },
+        update(ref, data) { ops.push({ ref, data }); },
+      });
+      for (const { ref, data } of ops) Object.assign(records.get(ref.path), data);
+      return result;
+    },
     batch() {
       const ops = [];
       return {

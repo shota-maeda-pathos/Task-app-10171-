@@ -232,22 +232,25 @@
     }
 }
 
+.accordion-wrapper {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.3s ease;
+
+    &.open {
+        grid-template-rows: 1fr;
+    }
+}
+
+.accordion-inner {
+    overflow: hidden;
+    min-height: 0;
+}
+
 .load-others {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    animation: loadSlideDown 0.2s ease-out;
-}
-
-@keyframes loadSlideDown {
-    from {
-        opacity: 0;
-        transform: translateY(-8px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
 }
 
 .load-row {

@@ -387,6 +387,20 @@ import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/model
         </nav>
 
         <div class="toast-container">
+          @if (missingRecurrenceTasks().length > 0) {
+            <div class="toast recurrence-recovery" role="status">
+              <div class="toast-title">次回タスクが未生成です</div>
+              @for (task of missingRecurrenceTasks(); track task.id) {
+                <div class="recurrence-recovery-item">
+                  <div class="toast-body">{{ task.title }}</div>
+                  <button type="button" [disabled]="retryingRecurrenceIds().has(task.id)"
+                    (click)="retryMissingRecurrence(task.id)">
+                    {{ retryingRecurrenceIds().has(task.id) ? '再試行中…' : '次回生成を再試行' }}
+                  </button>
+                </div>
+              }
+            </div>
+          }
           @for (toast of notificationService.toasts(); track toast.id) {
             <div class="toast" (click)="!toast.retry && notificationService.dismiss(toast.id)">
               <div class="toast-title">{{ toast.title }}</div>
@@ -670,6 +684,8 @@ import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/model
         font-weight: 600;
         margin-bottom: 4px;
       }
+      .recurrence-recovery { max-height: 45vh; overflow-y: auto; cursor: default; }
+      .recurrence-recovery-item + .recurrence-recovery-item { margin-top: 12px; }
       .toast button {
         margin-top: 10px;
         padding: 8px 12px;
@@ -1301,6 +1317,24 @@ export class App {
   auth = inject(AuthService);
   tasksService = inject(TasksService);
   notificationService = inject(NotificationService);
+  missingRecurrenceTasks = computed(() => {
+    this.auth.currentUser();
+    return this.tasksService.getMissingRecurrenceTasks();
+  });
+  retryingRecurrenceIds = signal(new Set<string>());
+
+  async retryMissingRecurrence(taskId: string): Promise<void> {
+    if (this.retryingRecurrenceIds().has(taskId)) return;
+    this.retryingRecurrenceIds.update(ids => new Set([...ids, taskId]));
+    try {
+      await this.tasksService.retryRecurrence(taskId);
+      this.notificationService.show('次回生成', '次回タスクの生成を確認しました');
+    } catch (error) {
+      this.notificationService.show('次回生成エラー', error instanceof Error ? error.message : '次回生成に失敗しました');
+    } finally {
+      this.retryingRecurrenceIds.update(ids => new Set([...ids].filter(id => id !== taskId)));
+    }
+  }
 
   showNotifications = false;
 
