@@ -51,6 +51,7 @@
               class="avatar-mini-wrap"
               cdkDrag
               cdkDragLockAxis="y"
+              [cdkDragStartDelay]="dragStartDelay()"
               [cdkDragData]="member"
               [title]="
                 member.name +
@@ -199,6 +200,7 @@
             class="member"
             cdkDrag
             cdkDragLockAxis="y"
+            [cdkDragStartDelay]="dragStartDelay()"
             [cdkDragData]="member"
             [class.selected]="filterAssignee() === member.uid"
             (click)="filterByMember(member.uid)"
@@ -523,7 +525,7 @@
 
         <div class="toolbar-right">
           <!-- 一括操作トグル -->
-          <button class="view-toggle-btn" type="button" [class.active]="bulkMode()" (click)="toggleBulkMode()" title="一括操作">
+          <button class="view-toggle-btn mobile-label-btn" type="button" [class.active]="bulkMode()" (click)="toggleBulkMode()" title="一括操作">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <polyline points="9 11 12 14 22 4" />
               <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
@@ -532,7 +534,7 @@
           </button>
 
           <!-- CSVエクスポート -->
-          <button class="view-toggle-btn" type="button" (click)="exportCsv()" title="CSVエクスポート">
+          <button class="view-toggle-btn mobile-label-btn" type="button" (click)="exportCsv()" title="CSVエクスポート">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="7 10 12 15 17 10" />
@@ -843,6 +845,7 @@
                       [class.bulk-checked]="bulkSelected().has(task.id)"
                       [class.bulk-active]="bulkMode()"
                       cdkDrag
+                      [cdkDragStartDelay]="dragStartDelay()"
                       [cdkDragData]="task"
                       [cdkDragDisabled]="!canMoveTask(task)"
                       (click)="toggleCompactTaskDetails(task, $event)"
@@ -1087,6 +1090,7 @@
                                   [id]="'task-' + child.id"
                                   cdkDrag
                                   cdkDragLockAxis="y"
+                                  [cdkDragStartDelay]="dragStartDelay()"
                                   [cdkDragData]="child"
                                   [cdkDragDisabled]="!canReorderSubtask(child)"
                                 >
@@ -1493,6 +1497,7 @@
                     [class.bulk-checked]="bulkSelected().has(task.id)"
                     [class.bulk-active]="bulkMode()"
                     cdkDrag
+                    [cdkDragStartDelay]="dragStartDelay()"
                     [cdkDragData]="task"
                     [cdkDragDisabled]="!canMoveTask(task) || expandedSubtaskIds().has(task.id)"
                     (click)="toggleCompactTaskDetails(task, $event)"
@@ -1833,6 +1838,7 @@
                                 [id]="'task-' + child.id"
                                 cdkDrag
                                 cdkDragLockAxis="y"
+                                [cdkDragStartDelay]="dragStartDelay()"
                                 [cdkDragData]="child"
                                 [cdkDragDisabled]="!canReorderSubtask(child)"
                               >

@@ -3124,6 +3124,12 @@ input[type="date"] {
         display: none;
     }
 
+    .view-toggle-btn.mobile-label-btn span {
+        display: inline;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+
     .sort-control span {
         font-size: 11px;
     }

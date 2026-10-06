@@ -503,6 +503,7 @@ export class BoardComponent {
 
   // モバイル判定
   isMobile = signal(typeof window !== 'undefined' && window.innerWidth <= 768);
+  dragStartDelay = computed(() => (this.isMobile() ? { touch: 200, mouse: 0 } : { touch: 0, mouse: 0 }));
 
   @HostListener('window:resize')
   onResize() {

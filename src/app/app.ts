@@ -624,7 +624,7 @@ import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/model
         padding: 10px 12px;
         border: 1px solid var(--line);
         border-radius: 8px;
-        font-size: 13px;
+        font-size: 16px;
         font-family: inherit;
       }
       .email-input:focus {
@@ -923,6 +923,8 @@ import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/model
         align-items: center;
         justify-content: center;
         animation: fadeIn 0.15s ease;
+        overflow: hidden;
+        touch-action: none;
       }
       @keyframes fadeIn {
         from {
@@ -938,7 +940,10 @@ import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/model
         width: 420px;
         max-width: calc(100vw - 32px);
         max-height: calc(100vh - 60px);
+        max-height: calc(100dvh - 60px);
         overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
         box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
         animation: modalUp 0.2s ease;
       }
@@ -996,6 +1001,9 @@ import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/model
         transition: border-color 0.15s;
         height: 40px;
         box-sizing: border-box;
+      }
+      select.fab-input {
+        padding-right: 32px;
       }
       .fab-input:focus {
         outline: none;
@@ -1446,6 +1454,7 @@ export class App {
 
   openFabModal(): void {
     this.showFabModal = true;
+    document.body.style.overflow = 'hidden';
     this.fabTitle = '';
     this.fabDescription = '';
     this.fabAssignee = null;
@@ -1461,6 +1470,7 @@ export class App {
 
   closeFabModal(): void {
     this.showFabModal = false;
+    document.body.style.overflow = '';
     this.fabTemplateSubtasks = [];
   }
 
