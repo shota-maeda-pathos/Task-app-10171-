@@ -11,6 +11,7 @@ import { Router } from '@angular/router';
 import { Timestamp, Firestore } from '@angular/fire/firestore';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/models/task.model';
+import { calculateLoadPercent, UNKNOWN_LOAD } from './core/utils/load-display';
 
 @Component({
   selector: 'app-root',
@@ -311,10 +312,114 @@ import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/model
                   <input type="checkbox" [(ngModel)]="fabFocus" />
                   今週やる
                 </label>
+
+                @if (fabAssignee) {
+                  @let pct = fabLoadPct();
+                  @let level = fabLoadLevel(pct);
+                  <div class="fab-load-preview">
+                    <span>{{ fabMemberName() }}の負荷</span>
+                    <div class="fab-lp-bar">
+                      <div
+                        class="fab-lp-fill"
+                        [class]="level"
+                        [style.width.%]="pct < 0 ? 0 : pct > 100 ? 100 : pct"
+                      ></div>
+                    </div>
+                    <span>{{ fabLoadLabel(pct) }}</span>
+                  </div>
+                  @if (level === 'danger') {
+                    <div class="fab-warning-box">
+                      <svg
+                        class="fab-warning-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path
+                          d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                        />
+                        <line x1="12" y1="9" x2="12" y2="13" />
+                        <line x1="12" y1="17" x2="12.01" y2="17" />
+                      </svg>
+                      @if (pct < 0) {
+                        {{ fabMemberName() }}さんは今週稼働予定がありません
+                      } @else {
+                        {{ fabMemberName() }}さんはすでに{{ fabLoadLabel(pct) }}の負荷です
+                      }
+                      @if (fabAlternativeCandidates().length > 0) {
+                        <div class="fab-alt-select-row">
+                          <select
+                            class="fab-alt-select"
+                            (change)="fabAssignee = $any($event.target).value"
+                          >
+                            <option value="" disabled selected>代わりの担当者を選ぶ</option>
+                            @for (c of fabAlternativeCandidates(); track c.uid) {
+                              <option [value]="c.uid">{{ c.name }}（{{ fabLoadLabel(c.pct) }}）</option>
+                            }
+                          </select>
+                        </div>
+                      }
+                    </div>
+                  }
+                }
               </div>
               <div class="fab-modal-footer">
                 <button class="fab-cancel" (click)="closeFabModal()">キャンセル</button>
                 <button class="fab-submit" (click)="createTaskFromFab()">作成</button>
+              </div>
+            </div>
+          </div>
+        }
+
+        @if (fabPendingConfirm) {
+          <div class="modal-overlay fab-confirm-overlay" (click)="fabPendingConfirm = false">
+            <div class="fab-confirm-modal" (click)="$event.stopPropagation()">
+              <h3>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  width="18"
+                  height="18"
+                  style="vertical-align: -3px; margin-right: 4px"
+                >
+                  <path
+                    d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                  />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                @if (fabLoadPct() < 0) {
+                  {{ fabMemberName() }}さんは今週稼働予定がありません
+                } @else {
+                  {{ fabMemberName() }}さんの負荷が{{ fabLoadLabel(fabLoadPct()) }}になります
+                }
+              </h3>
+              <p class="fab-confirm-sub">
+                このタスクを追加すると週の稼働可能時間を超えます。他のタスクの遅延につながる可能性があります。
+              </p>
+              @if (fabAlternativeCandidates().length > 0) {
+                <div class="fab-alt-candidates">
+                  <p class="fab-alt-label">代わりに振る（負荷が低い順）:</p>
+                  @for (c of fabAlternativeCandidates(); track c.uid) {
+                    <button type="button" class="fab-alt-candidate-btn" (click)="fabAssignee = c.uid; fabPendingConfirm = false">
+                      <span class="fab-alt-candidate-name">{{ c.name }}</span>
+                      <span class="fab-alt-candidate-pct" [class]="fabLoadLevel(c.pct)">{{ fabLoadLabel(c.pct) }}</span>
+                    </button>
+                  }
+                </div>
+              }
+              <div class="fab-confirm-actions">
+                <button type="button" (click)="fabPendingConfirm = false">やめる</button>
+                <button type="button" class="fab-confirm-danger" (click)="createTaskFromFab(true)">
+                  それでも割り当てる
+                </button>
               </div>
             </div>
           </div>
@@ -1172,6 +1277,147 @@ import { Priority, RecurrenceType, TaskStatus, TaskTemplate } from './core/model
           accent-color: var(--accent);
         }
       }
+      .fab-load-preview {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11.5px;
+        color: var(--muted);
+        padding: 8px 10px;
+        border-radius: 7px;
+        background: var(--bg);
+        margin-top: 8px;
+      }
+      .fab-lp-bar {
+        flex: 1;
+        height: 5px;
+        background: var(--line);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .fab-lp-fill {
+        height: 100%;
+        &.ok { background: var(--ok); }
+        &.warn { background: var(--warn); }
+        &.danger { background: var(--danger); }
+      }
+      .fab-warning-box {
+        background: rgba(var(--danger-rgb), 0.06);
+        border: 1px solid rgba(var(--danger-rgb), 0.25);
+        border-radius: 7px;
+        padding: 10px 11px;
+        margin-top: 8px;
+        font-size: 11.5px;
+        color: var(--danger);
+        line-height: 1.6;
+      }
+      .fab-warning-icon {
+        width: 14px;
+        height: 14px;
+        vertical-align: -2px;
+        margin-right: 2px;
+      }
+      .fab-alt-select-row {
+        margin-top: 8px;
+      }
+      .fab-alt-select {
+        width: 100%;
+        padding: 6px 8px;
+        border: 1px solid rgba(var(--danger-rgb), 0.35);
+        border-radius: 6px;
+        font-size: 11.5px;
+        font-family: inherit;
+        background: var(--card);
+        color: var(--ink);
+        cursor: pointer;
+        &:focus {
+          outline: none;
+          border-color: var(--accent);
+        }
+      }
+      .fab-confirm-overlay {
+        z-index: 510;
+      }
+      .fab-confirm-modal {
+        background: var(--card);
+        border-radius: 14px;
+        padding: 24px 24px 20px;
+        max-width: 420px;
+        width: 90%;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+        h3 {
+          font-size: 15px;
+          font-weight: 600;
+          margin: 0 0 12px;
+          color: var(--ink);
+          line-height: 1.5;
+        }
+      }
+      .fab-confirm-sub {
+        font-size: 12.5px;
+        color: var(--muted);
+        line-height: 1.6;
+        margin: 0 0 16px;
+      }
+      .fab-alt-candidates {
+        margin-bottom: 16px;
+      }
+      .fab-alt-label {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 0 0 8px;
+      }
+      .fab-alt-candidate-btn {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--card);
+        color: var(--ink);
+        font-size: 13px;
+        font-family: inherit;
+        cursor: pointer;
+        transition: all 0.15s;
+        & + & { margin-top: 4px; }
+        &:hover {
+          border-color: var(--accent);
+          background: rgba(var(--accent-rgb), 0.04);
+        }
+      }
+      .fab-alt-candidate-pct {
+        font-weight: 600;
+        font-size: 12px;
+        &.ok { color: var(--ok); }
+        &.warn { color: var(--warn); }
+        &.danger { color: var(--danger); }
+      }
+      .fab-confirm-actions {
+        display: flex;
+        gap: 8px;
+        button {
+          flex: 1;
+          padding: 10px;
+          border-radius: 8px;
+          font-size: 13px;
+          font-family: inherit;
+          cursor: pointer;
+          border: 1px solid var(--line);
+          background: var(--card);
+          color: var(--ink);
+          transition: all 0.15s;
+          &:hover { background: rgba(var(--ink-rgb), 0.04); }
+        }
+      }
+      .fab-confirm-danger {
+        background: var(--danger) !important;
+        border-color: var(--danger) !important;
+        color: #fff !important;
+        font-weight: 500;
+        &:hover { opacity: 0.9; }
+      }
       .fab-modal-footer {
         display: flex;
         justify-content: flex-end;
@@ -1577,7 +1823,46 @@ export class App {
   fabRecurrence: RecurrenceType | null = null;
   fabError = '';
   fabSubmitting = false;
+  fabPendingConfirm = false;
   private fabTemplateSubtasks: { title: string; estimatedHours: number }[] = [];
+
+  fabLoadPct(): number {
+    if (!this.fabAssignee) return 0;
+    let totalHours = this.tasksService.getMemberFocusHours(this.fabAssignee);
+    if (this.fabFocus) {
+      totalHours += this.fabHours || 0;
+    }
+    const cap = this.tasksService.getEffectiveCapacity(this.fabAssignee, 0);
+    if (cap <= 0) return totalHours > 0 ? -1 : 0;
+    return Math.round((totalHours / cap) * 100);
+  }
+
+  fabLoadLevel(pct: number): string {
+    if (pct === UNKNOWN_LOAD || !Number.isFinite(pct)) return 'unknown';
+    if (pct < 0) return 'danger';
+    if (pct >= 100) return 'danger';
+    if (pct >= 80) return 'warn';
+    return 'ok';
+  }
+
+  fabLoadLabel(pct: number): string {
+    if (pct === UNKNOWN_LOAD || !Number.isFinite(pct)) return '計算できません';
+    return pct < 0 ? '稼働予定なし' : pct + '%';
+  }
+
+  fabMemberName(): string {
+    if (!this.fabAssignee) return '';
+    return this.tasksService.members().find((m) => m.uid === this.fabAssignee)?.name ?? '不明';
+  }
+
+  fabAlternativeCandidates(): { uid: string; name: string; pct: number }[] {
+    return this.tasksService
+      .members()
+      .filter((m) => m.uid !== this.fabAssignee)
+      .map((m) => ({ uid: m.uid, name: m.name, pct: this.tasksService.getFocusLoadPercent(m.uid) }))
+      .filter((c) => c.pct !== UNKNOWN_LOAD && Number.isFinite(c.pct))
+      .sort((a, b) => a.pct - b.pct);
+  }
 
   openFabModal(): void {
     this.showFabModal = true;
@@ -1592,11 +1877,13 @@ export class App {
     this.fabFocus = false;
     this.fabRecurrence = null;
     this.fabError = '';
+    this.fabPendingConfirm = false;
     this.fabTemplateSubtasks = [];
   }
 
   closeFabModal(): void {
     this.showFabModal = false;
+    this.fabPendingConfirm = false;
     document.body.style.overflow = '';
     this.fabTemplateSubtasks = [];
   }
@@ -1611,13 +1898,21 @@ export class App {
     this.fabError = '';
   }
 
-  async createTaskFromFab(): Promise<void> {
+  async createTaskFromFab(force = false): Promise<void> {
     if (this.fabSubmitting) return;
     const title = this.fabTitle.trim();
     if (!title) {
       this.fabError = 'タスク名を入力してください';
       return;
     }
+    if (!force && this.fabAssignee) {
+      const pct = this.fabLoadPct();
+      if (this.fabLoadLevel(pct) === 'danger') {
+        this.fabPendingConfirm = true;
+        return;
+      }
+    }
+    this.fabPendingConfirm = false;
     this.fabSubmitting = true;
     try {
       const dueDate = this.fabDueDate
