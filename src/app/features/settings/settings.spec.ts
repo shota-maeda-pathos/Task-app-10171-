@@ -95,7 +95,7 @@ describe('Settings UI interactions', () => {
   let tasks: any;
   let notificationShow: ReturnType<typeof vi.fn>;
   beforeEach(async () => {
-    tasks = { disabledMembers: signal([]), members: signal([member('self'), member('other')]), teamSettings: signal({ holidays: [{ date: '2026-10-12', name: '休日' }] }), templates: signal([]), getFocusLoadPercent: () => 0, addHoliday: vi.fn().mockResolvedValue(true), addLeave: vi.fn().mockResolvedValue(undefined), removeHoliday: vi.fn().mockResolvedValue(undefined), removeLeave: vi.fn().mockResolvedValue(undefined) };
+    tasks = { disabledMembers: signal([]), members: signal([member('self'), member('other')]), teamSettings: signal({ holidays: [{ date: '2026-10-12', name: '休日' }] }), templates: signal([]), getFocusLoadPercent: () => 0, addHolidays: vi.fn().mockResolvedValue(1), addLeave: vi.fn().mockResolvedValue(undefined), removeHoliday: vi.fn().mockResolvedValue(undefined), removeLeave: vi.fn().mockResolvedValue(undefined) };
     notificationShow = vi.fn();
     await TestBed.configureTestingModule({ imports: [SettingsComponent], providers: [
       { provide: TasksService, useValue: tasks },
@@ -226,16 +226,16 @@ describe('Settings UI interactions', () => {
     expect(component.memberLeaveStartDate).toBe('2026-10-08');
   });
   it('preserves the next holiday draft after the previous save completes', async () => {
-    let finish!: (added: boolean) => void;
-    tasks.addHoliday.mockImplementation(() => new Promise<boolean>(resolve => finish = resolve));
+    let finish!: (count: number) => void;
+    tasks.addHolidays.mockImplementation(() => new Promise<number>(resolve => finish = resolve));
     const component = fixture.componentInstance;
-    component.newHolidayDate = '2026-10-07';
+    component.newHolidayStartDate = '2026-10-07';
     component.newHolidayName = '休日';
     const pending = component.addHoliday();
     component.newHolidayName = '次の休日';
-    finish(true); await pending;
+    finish(1); await pending;
     expect(component.newHolidayName).toBe('次の休日');
-    expect(component.newHolidayDate).toBe('2026-10-07');
+    expect(component.newHolidayStartDate).toBe('2026-10-07');
   });
   it('imports only selected year holidays and reports saved count', async () => {
     const year = fixture.componentInstance.holidayImportYear;
@@ -282,13 +282,13 @@ describe('Settings UI interactions', () => {
   });
   it('registers holidays and own weekday leave through rendered inputs', async () => {
     click('.leave-editor-toggle'); await fixture.whenStable();
-    await input('[aria-label="日付"]', '2026-10-12');
+    await input('[aria-label="開始日"]', '2026-10-12');
     await input('[aria-label="休日名"]', '会社休日');
     click('.leave-editor .add-btn'); await fixture.whenStable();
-    expect(tasks.addHoliday).toHaveBeenCalledWith({date: '2026-10-12', name: '会社休日'});
+    expect(tasks.addHolidays).toHaveBeenCalledWith([{date: '2026-10-12', name: '会社休日'}]);
     fixture.nativeElement.querySelectorAll('.leave-editor-toggle')[1].click(); await fixture.whenStable();
-    await input('.leave-settings [aria-label="開始日"]', '2026-10-09');
-    await input('.leave-settings [aria-label="終了日（空欄なら開始日のみ）"]', '2026-10-12');
+    await input('#leave-editor-form [aria-label="開始日"]', '2026-10-09');
+    await input('#leave-editor-form [aria-label="終了日（空欄なら開始日のみ）"]', '2026-10-12');
     fixture.nativeElement.querySelector('#leave-editor-form .add-btn').click(); await fixture.whenStable();
     expect(tasks.addLeave).toHaveBeenCalledWith('self', [{ date: '2026-10-09', label: '有給' }, { date: '2026-10-12', label: '有給' }]);
   });

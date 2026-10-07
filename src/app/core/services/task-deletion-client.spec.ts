@@ -26,6 +26,7 @@ describe('recurrence recovery after reloading', () => {
     for (let reload = 0; reload < 2; reload++) {
       const service = Object.assign(Object.create(TasksService.prototype), {
         tasks: signal(tasks), auth: { currentUser: { uid: 'user' } }, members: signal([{ uid: 'user', role: 'member' }]),
+        completionRequests: new Map(),
       });
       expect(service.getMissingRecurrenceTasks().map((task: any) => task.id)).toEqual(['missing', 'archived']);
     }
