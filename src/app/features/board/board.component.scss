@@ -12,6 +12,7 @@
 :host {
     display: block;
     height: calc(100vh - 52px);
+    height: calc(100dvh - 52px);
     overflow: hidden;
 }
 
@@ -2880,7 +2881,9 @@ input[type="date"] {
     :host {
         display: block !important;
         height: calc(100vh - 48px - 56px) !important;
+        height: calc(100dvh - 48px - 56px) !important;
         overflow: hidden !important;
+        overflow: clip !important;
     }
 
     .app {
@@ -2903,11 +2906,12 @@ input[type="date"] {
     .board-with-panel {
         display: flex !important;
         flex-direction: column !important;
-        flex: 1 1 auto !important;
-        height: 0 !important;
+        flex: 1 1 0% !important;
         min-height: 0 !important;
         overflow-y: auto !important;
         overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-y: auto;
     }
 
     .board-outer {
@@ -3170,6 +3174,7 @@ input[type="date"] {
     box-sizing: border-box;
     width: 150px;
     max-height: calc(100vh - 16px);
+    max-height: calc(100dvh - 16px);
     overflow: auto;
     right: auto;
     bottom: auto;
